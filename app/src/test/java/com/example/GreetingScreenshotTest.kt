@@ -21,7 +21,9 @@ class GreetingScreenshotTest {
 
   @Test
   fun greeting_screenshot() {
-    composeTestRule.setContent { MyApplicationTheme { Greeting("Robolectric") } }
+    composeTestRule.setContent { MyApplicationTheme { com.example.ui.screens.SplashScreen(onSplashCompleted = {}) } }
+
+    composeTestRule.waitForIdle()
 
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
   }

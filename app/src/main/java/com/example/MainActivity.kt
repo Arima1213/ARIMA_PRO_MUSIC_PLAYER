@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
@@ -38,10 +39,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 var showSplash by remember { mutableStateOf(true) }
+                var hasPermissions by remember {
+                    mutableStateOf(com.example.ui.screens.hasAllRequiredPermissions(this@MainActivity))
+                }
 
                 if (showSplash) {
                     SplashScreen(
                         onSplashCompleted = { showSplash = false }
+                    )
+                } else if (!hasPermissions) {
+                    PermissionsScreen(
+                        onPermissionsGranted = { hasPermissions = true }
                     )
                 } else {
                     MainAppContent(viewModel)
@@ -51,6 +59,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppContent(viewModel: AudioViewModel) {
     val currentTab by viewModel.currentTab.collectAsState()
@@ -67,199 +76,135 @@ fun MainAppContent(viewModel: AudioViewModel) {
     val scanTracksFound by viewModel.scanTracksFound.collectAsState()
     val scanProgress by viewModel.scanProgress.collectAsState()
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            // High-fidelity integrated Bottom Navigation Bar
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Mini Player HUD shows on any screen except Player tab when a song is loaded
-                if (currentTab != "player" && activeSong != null) {
-                    MiniPlayerHUD(
-                        song = activeSong!!,
-                        isPlaying = isPlaying,
-                        onPlayPauseClick = {
-                            if (isPlaying) viewModel.audioEngine.pause() else viewModel.audioEngine.play()
-                        },
-                        onMiniPlayerClick = { viewModel.selectTab("player") }
-                    )
-                }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-                NavigationBar(
-                    containerColor = BackgroundSurface,
-                    tonalElevation = 8.dp,
-                    modifier = Modifier.testTag("app_navigation_bar")
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Color(0xFF141414),
+                drawerTonalElevation = 0.dp,
+                modifier = Modifier.width(280.dp)
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Drawer Header
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
                 ) {
-                    NavigationBarItem(
-                        selected = currentTab == "library",
-                        onClick = { viewModel.selectTab("library") },
-                        modifier = Modifier.testTag("nav_library"),
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-                        label = { Text("Library", style = TechnicalSmall.copy(fontSize = 11.sp)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold
-                        )
+                    Text(
+                        text = "ARIMA PRO",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = FontFamily.Serif,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        ),
+                        color = AmberGold
                     )
-
-                    NavigationBarItem(
-                        selected = currentTab == "player",
-                        onClick = { viewModel.selectTab("player") },
-                        modifier = Modifier.testTag("nav_player"),
-                        icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Player") },
-                        label = { Text("Player", style = TechnicalSmall.copy(fontSize = 11.sp)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold
-                        )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "High-Res Audio Engine",
+                        style = BodyMedium.copy(fontSize = 11.sp),
+                        color = TextSecondary
                     )
+                }
 
-                    NavigationBarItem(
-                        selected = currentTab == "dac",
-                        onClick = { viewModel.selectTab("dac") },
-                        modifier = Modifier.testTag("nav_dac"),
-                        icon = { Icon(Icons.Default.Info, contentDescription = "Dac") },
-                        label = { Text("DAC Monitor", style = TechnicalSmall.copy(fontSize = 11.sp)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold
-                        )
-                    )
+                Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    NavigationBarItem(
-                        selected = currentTab == "settings",
-                        onClick = { viewModel.selectTab("settings") },
-                        modifier = Modifier.testTag("nav_settings"),
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings", style = TechnicalSmall.copy(fontSize = 11.sp)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold
-                        )
-                    )
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    NavigationBarItem(
-                        selected = currentTab == "format_variants",
-                        onClick = { viewModel.selectTab("format_variants") },
-                        modifier = Modifier.testTag("nav_variants"),
-                        icon = { Icon(Icons.Default.Star, contentDescription = "Variants") },
-                        label = { Text("Codecs", style = TechnicalSmall.copy(fontSize = 11.sp)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
+                // Navigation Items
+                val menuItems = listOf(
+                    Triple("library", "Library", Icons.Default.Home),
+                    Triple("player", "Now Playing", Icons.Default.PlayArrow),
+                    Triple("dac", "DAC Monitor", Icons.Default.Info),
+                    Triple("settings", "Settings", Icons.Default.Settings),
+                    Triple("format_variants", "Audio Codecs", Icons.Default.Star)
+                )
+
+                menuItems.forEach { (tabId, label, icon) ->
+                    val isSelected = currentTab == tabId
+                    NavigationDrawerItem(
+                        label = {
+                            Text(
+                                text = label,
+                                style = BodyLarge.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 14.sp
+                                )
+                            )
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) Color.Black else TextSecondary
+                            )
+                        },
+                        selected = isSelected,
+                        onClick = {
+                            viewModel.selectTab(tabId)
+                            scope.launch { drawerState.close() }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = AmberGold,
+                            unselectedContainerColor = Color.Transparent,
+                            selectedTextColor = Color.Black,
                             unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold
-                        )
+                            selectedIconColor = Color.Black,
+                            unselectedIconColor = TextSecondary
+                        ),
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .testTag("drawer_nav_$tabId")
                     )
                 }
             }
-        },
-        contentWindowInsets = WindowInsets.navigationBars
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(BackgroundPrimary)
-                .padding(innerPadding)
-        ) {
-            when (currentTab) {
-                "library" -> LibraryScreen(viewModel)
-                "player" -> PlayerScreen(viewModel)
-                "dac" -> DacMonitorScreen(viewModel)
-                "settings" -> SettingsScreen(viewModel)
-                "format_variants" -> FormatBadgeVariantsScreen(viewModel)
-            }
         }
-
-        // Sheet components overlay layers
-
-        if (showEqPanel) {
-            EqualizerPanel(
-                viewModel = viewModel,
-                onDismiss = { viewModel.showEqualizerPanel.value = false }
-            )
-        }
-
-        if (showScanningProgress) {
-            ScanningProgressDialog(
-                stepText = scanStepText,
-                filesScanned = scanFilesScanned,
-                filesTotal = scanFilesTotal,
-                tracksFound = scanTracksFound,
-                progress = scanProgress,
-                onCancel = { viewModel.showScanningProgressDialog.value = false; viewModel.isScanning.value = false }
-            )
-        }
-    }
-}
-
-@Composable
-fun MiniPlayerHUD(
-    song: com.example.domain.model.Song,
-    isPlaying: Boolean,
-    onPlayPauseClick: () -> Unit,
-    onMiniPlayerClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onMiniPlayerClick() }
-            .background(BackgroundSurface)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(BackgroundCard)
-        ) {
-            VinylArtVector(modifier = Modifier.fillMaxSize())
-        }
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets.navigationBars
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BackgroundPrimary)
+                    .padding(innerPadding)
+            ) {
+                when (currentTab) {
+                    "library" -> LibraryScreen(
+                        viewModel = viewModel,
+                        onOpenMenu = { scope.launch { drawerState.open() } }
+                    )
+                    "player" -> PlayerScreen(viewModel)
+                    "dac" -> DacMonitorScreen(viewModel)
+                    "settings" -> SettingsScreen(viewModel)
+                    "format_variants" -> FormatBadgeVariantsScreen(viewModel)
+                }
+            }
 
-        Spacer(modifier = Modifier.width(12.dp))
+            // Sheet components overlay layers
+            if (showEqPanel) {
+                EqualizerPanel(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.showEqualizerPanel.value = false }
+                )
+            }
 
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                style = BodyLarge.copy(fontSize = 13.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FormatBadge(format = song.format)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = song.artist,
-                    style = BodyMedium.copy(fontSize = 11.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (showScanningProgress) {
+                ScanningProgressDialog(
+                    stepText = scanStepText,
+                    filesScanned = scanFilesScanned,
+                    filesTotal = scanFilesTotal,
+                    tracksFound = scanTracksFound,
+                    progress = scanProgress,
+                    onCancel = { viewModel.showScanningProgressDialog.value = false; viewModel.isScanning.value = false }
                 )
             }
         }
-
-        IconButton(
-            onClick = onPlayPauseClick,
-            modifier = Modifier.testTag("mini_play_pause_button")
-        ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
-                contentDescription = "Play/Pause",
-                tint = AmberGold
-            )
-        }
     }
-    Divider(color = BorderSubtle, thickness = 0.5.dp)
 }

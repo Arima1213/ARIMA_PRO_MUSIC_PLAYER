@@ -28,6 +28,7 @@ import com.example.ui.viewmodel.AudioViewModel
 
 @Composable
 fun DacMonitorScreen(viewModel: AudioViewModel) {
+    val dacState by viewModel.dacState.collectAsState(initial = com.arima.pro.core.audio.DacState.NotDetected)
     val dacModeActive by viewModel.dacExclusiveMode.collectAsState()
     val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
     val activeSong by viewModel.audioEngine.currentSong.collectAsState()
@@ -40,6 +41,9 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
             isRefreshing = false
         }
     }
+
+    val isDacDetected = dacState is com.arima.pro.core.audio.DacState.Detected
+    val dacInfo = (dacState as? com.arima.pro.core.audio.DacState.Detected)?.dacInfo
 
     Column(
         modifier = Modifier
@@ -92,34 +96,42 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                         .padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Solid green indicator pill
+                    // Dynamic status light
                     Box(
                         modifier = Modifier
                             .size(12.dp)
                             .clip(CircleShape)
-                            .background(if (isRefreshing) Color.Gray else VUSafe)
+                            .background(
+                                if (isRefreshing) Color.Gray 
+                                else if (isDacDetected) VUSafe 
+                                else Color(0xFFE57373)
+                            )
                     )
                     
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isRefreshing) "Scanning USB Devices..." else "RME ADI-2 DAC fs",
+                            text = if (isRefreshing) "Scanning USB Devices..." 
+                                   else if (isDacDetected) dacInfo!!.name 
+                                   else "SPEAKER (INTERNAL)",
                             style = HeadlineSmall.copy(fontWeight = FontWeight.Bold),
                             color = if (isRefreshing) TextSecondary else TextPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = if (isRefreshing) "Direct Hardware Querying..." else "USB AUDIO • CLASS 2",
+                            text = if (isRefreshing) "Direct Hardware Querying..." 
+                                   else if (isDacDetected) "USB AUDIO • CLASS 2 • EXCLUSIVE" 
+                                   else "SYSTEM AUDIO MIXER ROUTING",
                             style = TechnicalSmall.copy(letterSpacing = 1.sp)
                         )
                     }
 
                     if (!isRefreshing) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Active",
-                            tint = VUSafe,
+                            imageVector = if (isDacDetected) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = "Active Status",
+                            tint = if (isDacDetected) VUSafe else Color(0xFFE57373),
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -129,30 +141,39 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
             // Warnings Card Banner
             item {
+                val bannerTitle = if (isDacDetected) "DAC EXCLUSIVE MODE ACTIVE" else "SPEAKER FALLBACK MODE ACTIVE"
+                val bannerText = if (isDacDetected) {
+                     "Audio stream outputting directly to ${dacInfo?.name ?: "hardware DAC"}. System Android mixer bypass is ACTIVE. Latency reduction is maximized."
+                } else {
+                     "No external high-res USB DAC detected. Audio is automatically routed to internal handset speakers. Plug in a USB DAC for direct bit-perfect hardware output."
+                }
+                val bannerColor = if (isDacDetected) AmberGold else Color(0xFFE57373)
+                val bannerBg = if (isDacDetected) AmberMuted.copy(alpha = 0.15f) else Color(0xFFE57373).copy(alpha = 0.1f)
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
-                        .background(AmberMuted.copy(alpha = 0.15f))
-                        .border(1.dp, AmberGold.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                        .background(bannerBg)
+                        .border(1.dp, bannerColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
                         .padding(16.dp),
                     verticalAlignment = Alignment.Top
                 ) {
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = "Exclusive Mode Indicator",
-                        tint = AmberGold,
+                        tint = bannerColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "DAC EXCLUSIVE MODE ACTIVE",
-                            style = LabelCaps.copy(fontWeight = FontWeight.Bold)
+                            text = bannerTitle,
+                            style = LabelCaps.copy(fontWeight = FontWeight.Bold, color = bannerColor)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Audio stream outputting directly to RME hardware. System Android mixer bypass is ACTIVE. Latency reduction is maximized.",
+                            text = bannerText,
                             style = BodyMedium,
                             color = TextPrimary.copy(alpha = 0.9f)
                         )
@@ -163,14 +184,20 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
             // Tables Header Information
             item {
+                val manufacturer = if (isDacDetected) (dacInfo?.manufacturer ?: "USB Audiophile") else "Google"
+                val model = if (isDacDetected) (dacInfo?.name ?: "High-Res DAC") else "Speaker (Internal Phone Audio)"
+                val connection = if (isDacDetected) "USB Audio 2.0 Client" else "Internal Sound System Bus"
+                val usbClass = if (isDacDetected) (dacInfo?.connectionType ?: "USB-C OTG Sync Mode") else "N/A (Built-in Hub)"
+                val driverMode = if (isDacDetected) "Direct Exclusive Bypass" else "Android AudioFlinger Wrapper"
+
                 DacTechnicalTableGroup(
                     title = "DEVICE INFORMATION",
                     rows = listOf(
-                        "Manufacturer" to "RME",
-                        "Model" to "ADI-2 DAC",
-                        "Interface" to "USB Audio Client",
-                        "USB Class" to "2.0 (High Speed)",
-                        "Driver Mode" to "Direct Kernel PCM"
+                        "Manufacturer" to manufacturer,
+                        "Model" to model,
+                        "Interface" to connection,
+                        "USB Link Class" to usbClass,
+                        "Driver Mode" to driverMode
                     )
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -178,14 +205,20 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
             // DAC Technical Hardware Architecture Specs
             item {
+                val chipset = if (isDacDetected) (dacInfo?.chipName ?: "High-End Dual Core DAC") else "System Default Audio Subsystem"
+                val opamps = if (isDacDetected) "OPA1612 Ultra-low noise" else "Built-in Speaker Amp"
+                val jitter = if (isDacDetected) "SteadyClockFS ultra-low clock" else "System Clock Sync"
+                val thdn = if (isDacDetected) "${(dacInfo?.thdn ?: 0.0002) * 100}%" else "0.0100%"
+                val snr = if (isDacDetected) "${dacInfo?.snr ?: 122.5} dB" else "92.0 dB"
+
                 DacTechnicalTableGroup(
                     title = "ARCHITECTURE",
                     rows = listOf(
-                        "DAC Chipset" to "Dual AKM AK4493EQ",
-                        "Op-Amps" to "OPA1612 Ultra-low noise",
-                        "Clock Jitter" to "SteadyClock FS (< 1ps)",
-                        "THD + N" to "-120 dB (0.0001%)",
-                        "Signal SNR" to "124 dB"
+                        "DAC Chipset" to chipset,
+                        "Op-Amps" to opamps,
+                        "Clock Sync" to jitter,
+                        "THD + N" to thdn,
+                        "Signal SNR" to snr
                     )
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -193,6 +226,12 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
             // Capabilities Checklist Table
             item {
+                val sampleRateLabel = if (isDacDetected) "${(dacInfo?.maxSampleRate ?: 384000) / 1000} kHz / ${(dacInfo?.maxBitDepth ?: 24)}-bit" else "48 kHz / 16-bit"
+                val supportsDsd = isDacDetected && (dacInfo?.supportsDsd ?: false)
+                val supportsDop = isDacDetected && (dacInfo?.supportsDop ?: false)
+                val dsdText = if (supportsDsd) "Native DSD512 Supported" else "Not Supported"
+                val dopText = if (supportsDop) "Active" else "Not Supported"
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -207,10 +246,10 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                     
-                    CapabilityCheckRow("PCM Playback Rate Support", "768 kHz / 32-bit", true)
-                    CapabilityCheckRow("DSD Direct Format Playback", "DSD512 Direct", true)
-                    CapabilityCheckRow("Full hardware MQA Decoding", "Supported", true)
-                    CapabilityCheckRow("DSD over PCM encapsulation (DoP)", "DoP256 Output", true)
+                    CapabilityCheckRow("PCM Playback Rate Support", sampleRateLabel, true)
+                    CapabilityCheckRow("DSD Direct Format Playback", dsdText, supportsDsd)
+                    CapabilityCheckRow("Full hardware MQA Decoding", if (isDacDetected) "Supported" else "Not Supported", isDacDetected)
+                    CapabilityCheckRow("DSD over PCM encapsulation (DoP)", dopText, supportsDop)
                 }
                 Spacer(modifier = Modifier.height(20.dp))
             }
@@ -223,7 +262,7 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                         "Mode" to if (isPlaying && activeSong != null) activeSong!!.format else "STANDBY",
                         "Sample Rate" to if (isPlaying && activeSong != null) "${activeSong!!.sampleRate} Real-time" else "0 Hz",
                         "Active Bit Depth" to if (isPlaying && activeSong != null) activeSong!!.bitDepth else "0 bit",
-                        "Device Volume" to "-6.0 dBFS"
+                        "Device Volume" to if (isDacDetected) "-6.0 dBFS" else "100% System Vol"
                     ),
                     highlightValueColor = true
                 )

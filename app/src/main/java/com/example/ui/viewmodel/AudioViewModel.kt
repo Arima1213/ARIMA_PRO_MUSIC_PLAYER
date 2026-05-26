@@ -20,7 +20,10 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
     private val repository = AudioRepository(db)
-    val audioEngine = AudioEngine()
+    val audioEngine = AudioEngine(application)
+    private val scanner = com.arima.pro.core.audio.LibraryScanner(application)
+    private val dacController = com.arima.pro.core.audio.DacController(application)
+    val dacState = dacController.detectDac()
 
     // --- Tab Navigation States ---
     private val _currentTab = MutableStateFlow("library") // "library", "player", "dac", "settings", "format_variants"
@@ -112,6 +115,38 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         seedInitialDataIfNeeded()
+        // Restore persistable URI permissions on app restart
+        viewModelScope.launch {
+            try {
+                repository.allFolders.first().forEach { folder ->
+                    if (folder.path.startsWith("content://")) {
+                        val uri = android.net.Uri.parse(folder.path)
+                        val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        try {
+                            application.contentResolver.takePersistableUriPermission(uri, takeFlags)
+                        } catch (e: Exception) {
+                            // Already active or error
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+        // Monitor USB DAC attachment and auto pause if disconnected while actively streaming
+        viewModelScope.launch {
+            var lastDacDetected = false
+            dacState.collect { state ->
+                val isDetected = state is com.arima.pro.core.audio.DacState.Detected
+                if (lastDacDetected && !isDetected) {
+                    if (audioEngine.isPlaying.value) {
+                        audioEngine.pause()
+                    }
+                }
+                lastDacDetected = isDetected
+            }
+        }
     }
 
     private fun seedInitialDataIfNeeded() {
@@ -251,13 +286,11 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     // --- Directory Scanner Logic ---
     fun addNewFolder(path: String) {
         viewModelScope.launch {
-            val randomFiles = kotlin.random.Random.nextInt(15, 80)
-            val randomSize = String.format("%.1f GB", kotlin.random.Random.nextFloat() * 20f + 5f)
             val newFolder = Folder(
                 path = path,
-                fileCount = randomFiles,
-                totalSize = randomSize,
-                lastScan = "Just now"
+                fileCount = 0,
+                totalSize = "0 B",
+                lastScan = "Never"
             )
             repository.insertFolder(newFolder)
             showAddFolderDialog.value = false
@@ -278,78 +311,26 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         scanProgress.value = 0f
         scanFilesScanned.value = 0
         scanTracksFound.value = 0
-        val totalToScan = kotlin.random.Random.nextInt(400, 2500)
-        scanFilesTotal.value = totalToScan
+        scanFilesTotal.value = 0
 
         scanJob = viewModelScope.launch {
-            val targetSteps = listOf(
-                "Checking storage sectors...",
-                "Reading folder index: $folderPath",
-                "Parsing FLAC metadata headers...",
-                "Analyzing DSD bitstreams...",
-                "Verifying file checksum integrity...",
-                "Refreshing catalog database columns..."
-            )
-
-            var scanned = 0
-            var found = 0
-
-            for (step in targetSteps) {
-                scanStepText.value = step
-                val range = kotlin.random.Random.nextInt(10, 15)
-                for (i in 0..range) {
-                    delay(kotlin.random.Random.nextLong(15, 60))
-                    scanned += (totalToScan / (targetSteps.size * range))
-                    if (scanned > totalToScan) scanned = totalToScan
-
-                    scanFilesScanned.value = scanned
-                    scanProgress.value = scanned.toFloat() / totalToScan.toFloat()
-
-                    if (kotlin.random.Random.nextFloat() > 0.45f) {
-                        found++
-                        scanTracksFound.value = found
-                    }
+            try {
+                scanner.scanFolder(folderPath).collect { progress ->
+                    scanStepText.value = progress.step
+                    scanFilesScanned.value = progress.filesScanned
+                    scanFilesTotal.value = progress.filesTotal
+                    scanTracksFound.value = progress.tracksFound
+                    scanProgress.value = progress.progress
                 }
+            } catch (e: Exception) {
+                scanStepText.value = "Scan error: ${e.localizedMessage}"
+            } finally {
+                delay(1200)
+                isScanning.value = false
+                showScanningProgressDialog.value = false
+                val songs = repository.allSongs.first()
+                audioEngine.setQueue(songs)
             }
-
-            // Complete simulation by adding generic custom scanned high-res song metadata
-            val newlyScannedSongs = listOf(
-                Song(
-                    title = "Kind Of Blue (Stereo Mix)",
-                    artist = "Miles Davis",
-                    album = "Kind of Blue",
-                    duration = 562000L,
-                    format = "DSD",
-                    sampleRate = "2.8MHz",
-                    bitDepth = "1-bit",
-                    fileSize = "940MB",
-                    path = "$folderPath/Miles_Davis_Kind_Of_Blue.dsf",
-                    folderPath = folderPath
-                ),
-                Song(
-                    title = "A Love Supreme Pt 1",
-                    artist = "John Coltrane",
-                    album = "A Love Supreme",
-                    duration = 463000L,
-                    format = "WAV",
-                    sampleRate = "192kHz",
-                    bitDepth = "32-bit",
-                    fileSize = "1.10GB",
-                    path = "$folderPath/John_Coltrane_Pt_1.wav",
-                    folderPath = folderPath
-                )
-            )
-
-            repository.insertSongs(newlyScannedSongs)
-            val updatedSongs = repository.allSongs.first()
-            audioEngine.setQueue(updatedSongs)
-
-            scanFilesScanned.value = totalToScan
-            scanProgress.value = 1.0f
-            scanStepText.value = "Library updated successfully. 12 errors detected (skipped corrupted files)."
-            delay(1200) // let them admire the progress
-            isScanning.value = false
-            showScanningProgressDialog.value = false
         }
     }
 
@@ -398,6 +379,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         audioEngine.release()
+        dacController.unregister()
     }
 }
 

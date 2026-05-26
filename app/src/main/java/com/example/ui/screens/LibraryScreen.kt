@@ -37,10 +37,35 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.AlbumItem
 import com.example.ui.viewmodel.ArtistItem
 import com.example.ui.viewmodel.AudioViewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import androidx.documentfile.provider.DocumentFile
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(viewModel: AudioViewModel) {
+fun LibraryScreen(
+    viewModel: AudioViewModel,
+    onOpenMenu: () -> Unit
+) {
+    val context = LocalContext.current
+    val openDirectoryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            val contentResolver = context.contentResolver
+            val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                contentResolver.takePersistableUriPermission(it, takeFlags)
+            } catch (e: Exception) {
+                // Log or ignore
+            }
+            viewModel.addNewFolder(it.toString())
+        }
+    }
+
     val currentTab by viewModel.currentLibraryTab.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val songs by viewModel.filteredSongs.collectAsState()
@@ -52,6 +77,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
 
     var showAddFolder by remember { mutableStateOf(false) }
     var folderPathInput by remember { mutableStateOf("") }
+    var selectedSongForSheet by remember { mutableStateOf<Song?>(null) }
 
     Box(
         modifier = Modifier
@@ -60,7 +86,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // 1. Custom Top Bar
+            // 1. Custom Top Bar (Logo + Settings Gear only)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -70,7 +96,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(
-                    onClick = { /* Menu Action */ },
+                    onClick = onOpenMenu,
                     modifier = Modifier.testTag("menu_button")
                 ) {
                     Icon(
@@ -90,31 +116,153 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                     color = AmberGold
                 )
 
-                Row {
-                    IconButton(
-                        onClick = { viewModel.showEqualizerPanel.value = true },
-                        modifier = Modifier.testTag("eq_shortcut_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Equalizer",
-                            tint = TextPrimary
-                        )
-                    }
-                    IconButton(
-                        onClick = { viewModel.selectTab("settings") },
-                        modifier = Modifier.testTag("settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = TextPrimary
-                        )
-                    }
+                IconButton(
+                    onClick = { viewModel.selectTab("settings") },
+                    modifier = Modifier.testTag("settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = TextPrimary
+                    )
                 }
             }
 
-            // 2. Tab Select Chips (Songs, Albums, Artists, Folders)
+            // 2. Now Playing Tap Area (Active Song Header HUD, Height: 56dp)
+            if (activeSong != null) {
+                val position by viewModel.audioEngine.currentPosition.collectAsState()
+                val totalDuration = activeSong!!.duration
+                val progressFraction = if (totalDuration > 0) position.toFloat() / totalDuration.toFloat() else 0f
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                    shape = RoundedCornerShape(0.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clickable { viewModel.selectTab("player") }
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Spinning/pulse bar simulator container
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .padding(end = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val barWidth = 2.5.dp.toPx()
+                                    val spacing = 2.dp.toPx()
+                                    val h1 = if (isPlaying) (8.dp.toPx() + kotlin.math.sin(System.currentTimeMillis() / 150.0).toFloat() * 4.dp.toPx() + 4.dp.toPx()) else 10.dp.toPx()
+                                    val h2 = if (isPlaying) (12.dp.toPx() + kotlin.math.cos(System.currentTimeMillis() / 200.0).toFloat() * 6.dp.toPx() + 6.dp.toPx()) else 14.dp.toPx()
+                                    val h3 = if (isPlaying) (6.dp.toPx() + kotlin.math.sin(System.currentTimeMillis() / 250.0).toFloat() * 3.dp.toPx() + 3.dp.toPx()) else 8.dp.toPx()
+
+                                    drawRoundRect(
+                                        color = AmberGold,
+                                        topLeft = androidx.compose.ui.geometry.Offset(0f, (size.height - h1) / 2f),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, h1),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = AmberGold,
+                                        topLeft = androidx.compose.ui.geometry.Offset(barWidth + spacing, (size.height - h2) / 2f),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, h2),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = AmberGold,
+                                        topLeft = androidx.compose.ui.geometry.Offset((barWidth + spacing) * 2f, (size.height - h3) / 2f),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, h3),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx())
+                                    )
+                                }
+                            }
+
+                            // Song Description Title & Artist Row
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = activeSong!!.title,
+                                    style = BodyLarge.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                    color = AmberGold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = " • ${activeSong!!.artist}",
+                                    style = BodyMedium.copy(fontSize = 11.sp),
+                                    color = TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            // Toggle play pause HUD button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        if (isPlaying) {
+                                            viewModel.audioEngine.pause()
+                                        } else {
+                                            viewModel.audioEngine.play()
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    if (isPlaying) {
+                                        CustomPauseIcon(color = AmberGold, modifier = Modifier.size(16.dp))
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Trigger play",
+                                            tint = AmberGold,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+
+                                val currentText = formatTimeLocal(position)
+                                val totalText = formatTimeLocal(totalDuration)
+                                Text(
+                                    text = "$currentText / $totalText",
+                                    style = TechnicalSmall.copy(fontSize = 11.sp),
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        // Bottom horizontal seekline indicator progress bounds
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(Color.DarkGray)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(progressFraction.coerceIn(0f, 1f))
+                                    .background(AmberGold)
+                            )
+                        }
+                    }
+                }
+                Divider(color = BorderSubtle, thickness = 0.5.dp)
+            }
+
+            // 3. Tab Select Chips (Asymmetric Selected-Expands [♪ Songs] [⊏] [👤] [📁])
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -123,6 +271,14 @@ fun LibraryScreen(viewModel: AudioViewModel) {
             ) {
                 listOf("Songs", "Albums", "Artists", "Folders").forEach { tab ->
                     val isSelected = currentTab.equals(tab, ignoreCase = true)
+                    val icon = when (tab) {
+                        "Songs" -> Icons.Default.PlayArrow
+                        "Albums" -> Icons.Default.Star
+                        "Artists" -> Icons.Default.Person
+                        "Folders" -> Icons.Default.Home
+                        else -> Icons.Default.PlayArrow
+                    }
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -137,20 +293,35 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = tab,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.Black else TextSecondary
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = tab,
+                                tint = if (isSelected) Color.Black else TextSecondary,
+                                modifier = Modifier.size(15.dp)
                             )
-                        )
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = tab,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // 3. Search Bar
+            // 4. Search Bar with brief generic "Search..." placeholder
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -164,7 +335,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                         .testTag("library_search_input"),
                     placeholder = {
                         Text(
-                            text = "Search library...",
+                            text = "Search...",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextMuted
                         )
@@ -191,7 +362,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 4. Header Label Details (Counts)
+            // 5. Section Header Counters
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -236,7 +407,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 5. Active Tab Contents
+            // 6. Scrollable Grid & list container contents
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -247,7 +418,8 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                         songs = songs,
                         activeSong = activeSong,
                         onSongClick = { viewModel.playSong(it) },
-                        onFavClick = { viewModel.toggleFavorite(it) }
+                        onFavClick = { viewModel.toggleFavorite(it) },
+                        onKebabClick = { selectedSongForSheet = it }
                     )
                     "albums" -> AlbumsGridView(
                         albums = albums,
@@ -270,7 +442,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                     )
                     "folders" -> FoldersListView(
                         folders = folders,
-                        onAddFolderClick = { showAddFolder = true },
+                        onAddFolderClick = { openDirectoryLauncher.launch(null) },
                         onScanClick = { viewModel.triggerScan(it.path) },
                         onDeleteClick = { viewModel.deleteFolder(it) }
                     )
@@ -318,6 +490,7 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                             if (folderPathInput.isNotBlank()) {
                                 viewModel.addNewFolder(folderPathInput)
                                 folderPathInput = ""
+                                showAddFolder = false
                             }
                         }
                     ) {
@@ -331,6 +504,226 @@ fun LibraryScreen(viewModel: AudioViewModel) {
                 }
             )
         }
+
+        // 7. Standard Bottom Option Sheet
+        if (selectedSongForSheet != null) {
+            val song = selectedSongForSheet!!
+            val isCurrentPlaying = activeSong?.id == song.id
+
+            ModalBottomSheet(
+                onDismissRequest = { selectedSongForSheet = null },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = Color(0xFF141414),
+                dragHandle = { BottomSheetDefaults.DragHandle(color = TextSecondary) },
+                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+            ) {
+                if (isCurrentPlaying) {
+                    // Tapping kebab on current active play: display device DAC and codec specs details
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 32.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "AUDIO OUTPUT",
+                                style = TechnicalSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp),
+                                color = AmberGold
+                            )
+                            IconButton(onClick = { selectedSongForSheet = null }) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
+                            }
+                        }
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
+
+                        val specs = listOf(
+                            "Format" to song.format,
+                            "Sample Rate" to song.sampleRate,
+                            "Bit Depth" to song.bitDepth,
+                            "Channels" to "Stereo",
+                            "Bitrate" to when (song.format.uppercase()) {
+                                "WAV" -> "9,216 kbps"
+                                "FLAC" -> "2,822 kbps"
+                                "DSD" -> "5,644 kbps"
+                                else -> "1,411 kbps"
+                            },
+                            "Duration" to song.durationText,
+                            "File Size" to song.fileSize
+                        )
+
+                        specs.forEach { (label, value) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = label, style = BodyMedium.copy(fontSize = 13.sp), color = TextSecondary)
+                                Text(text = value, style = TechnicalSmall.copy(fontSize = 13.sp), color = TextPrimary)
+                            }
+                        }
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "DAC", style = BodyMedium.copy(fontSize = 13.sp), color = TextSecondary)
+                            Text(text = "RME ADI-2 DAC fs", style = TechnicalSmall.copy(fontSize = 13.sp, color = AmberGold))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Output Mode", style = BodyMedium.copy(fontSize = 13.sp), color = TextSecondary)
+                            Text(text = "PCM ${song.bitDepth}/${song.sampleRate}", style = TechnicalSmall.copy(fontSize = 13.sp, color = AmberGold))
+                        }
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.audioEngine.playNext(song)
+                                    selectedSongForSheet = null
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = BackgroundCard),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("Play Next", style = BodyMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.audioEngine.addToQueue(song)
+                                    selectedSongForSheet = null
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = BackgroundCard),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("Add to Queue", style = BodyMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                            }
+                        }
+                    }
+                } else {
+                    // Tapping kebab on standard non-active song elements setup: details options layout
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 32.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "SONG OPTIONS",
+                                style = TechnicalSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp),
+                                color = AmberGold
+                            )
+                            IconButton(onClick = { selectedSongForSheet = null }) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
+                            }
+                        }
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🎵 ${song.title} — ${song.artist}",
+                                style = BodyLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${song.format} • ${song.bitDepth}/${song.sampleRate} • ${song.durationText}",
+                            style = BodyMedium.copy(fontSize = 12.sp),
+                            color = TextSecondary
+                        )
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 12.dp))
+
+                        Button(
+                            onClick = {
+                                viewModel.playSong(song)
+                                selectedSongForSheet = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play Now", tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Play Now", style = BodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.Black))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val actions = listOf(
+                            "Play Next" to { viewModel.audioEngine.playNext(song) },
+                            "Add to Queue" to { viewModel.audioEngine.addToQueue(song) },
+                            "View Album" to { /* no-op details logic */ },
+                            "View Artist" to { /* no-op details logic */ },
+                            "Add to Favorites" to { viewModel.toggleFavorite(song) },
+                            "Song Information" to { /* metadata viewer */ }
+                        )
+
+                        actions.chunked(2).forEach { pair ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                pair.forEach { (label, action) ->
+                                    OutlinedButton(
+                                        onClick = {
+                                            action()
+                                            selectedSongForSheet = null
+                                        },
+                                        border = BorderStroke(0.5.dp, BorderSubtle),
+                                        shape = RoundedCornerShape(4.dp),
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                                    ) {
+                                        Text(text = label, style = BodyMedium.copy(fontSize = 12.sp))
+                                    }
+                                }
+                            }
+                        }
+
+                        Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 12.dp))
+
+                        Text(
+                            text = "File: ${song.path}",
+                            style = TechnicalSmall.copy(fontSize = 10.sp),
+                            color = TextMuted,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -341,7 +734,8 @@ fun SongsListView(
     songs: List<Song>,
     activeSong: Song?,
     onSongClick: (Song) -> Unit,
-    onFavClick: (Song) -> Unit
+    onFavClick: (Song) -> Unit,
+    onKebabClick: (Song) -> Unit
 ) {
     if (songs.isEmpty()) {
         EmptyStateView(text = "No audiophile tracks found. Trigger a sync/scan.")
@@ -399,20 +793,28 @@ fun SongsListView(
                                 text = "${song.bitDepth} • ${song.sampleRate}",
                                 style = TechnicalSmall,
                                 color = TextSecondary
-                            )
+                              )
                         }
                     }
 
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         IconButton(onClick = { onFavClick(song) }) {
                             Icon(
                                 imageVector = if (song.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = "Favorite",
                                 tint = if (song.isFavorite) Color.Red else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(onClick = { onKebabClick(song) }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Options",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -548,6 +950,19 @@ fun ArtistsListView(artists: List<ArtistItem>, onArtistClick: (ArtistItem) -> Un
     }
 }
 
+private fun getFolderDisplayName(path: String, context: android.content.Context): String {
+    if (path.startsWith("content://")) {
+        return try {
+            val file = DocumentFile.fromTreeUri(context, Uri.parse(path))
+            file?.name ?: path
+        } catch (e: Exception) {
+            path.substringAfterLast("%2F").substringAfterLast("%3A")
+        }
+    } else {
+        return path.substringAfterLast('/')
+    }
+}
+
 @Composable
 fun FoldersListView(
     folders: List<Folder>,
@@ -578,7 +993,7 @@ fun FoldersListView(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = folder.path,
+                            text = getFolderDisplayName(folder.path, LocalContext.current),
                             style = TechnicalLarge.copy(fontSize = 13.sp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -792,4 +1207,11 @@ fun CassetteTapeVectorArt() {
             end = androidx.compose.ui.geometry.Offset(w * 0.8f, h * 0.75f)
         )
     }
+}
+
+private fun formatTimeLocal(ms: Long): String {
+    val totalSecs = ms / 1000
+    val secs = totalSecs % 60
+    val mins = totalSecs / 60
+    return String.format("%02d:%02d", mins, secs)
 }

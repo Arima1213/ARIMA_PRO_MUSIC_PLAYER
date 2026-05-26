@@ -1,0 +1,30 @@
+[
+  {
+    "vendorId": "0x1234",
+    "productId": "0x5678",
+    "vendorName": "SMSL",
+    "chipName": "DL-200",
+    "description": "SMSL DL-200 ES9039Q2M USB DAC"
+  },
+  {
+    "vendorId": "0x1851",
+    "productId": "0x5101",
+    "vendorName": "DragonFly",
+    "chipName": "ESS Sabre ES9038Q2M",
+    "description": "DragonFly Cobalt High-Res USB DAC"
+  },
+  {
+    "vendorId": "0x0a12",
+    "productId": "0x4001",
+    "vendorName": "FiiO",
+    "chipName": "Dual AK4493SEQ",
+    "description": "FiiO K7 High-Res Balanced Desktop DAC"
+  },
+  {
+    "vendorId": "0x152a",
+    "productId": "0x87c3",
+    "vendorName": "Topping",
+    "chipName": "Dual ES9038Q2M",
+    "description": "Topping D50s Desk High-Res USB DAC"
+  }
+]

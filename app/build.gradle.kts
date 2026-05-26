@@ -118,4 +118,10 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+  implementation(libs.androidx.media3.exoplayer)
+  implementation(libs.androidx.media3.session)
+  implementation(libs.androidx.media3.ui)
+  implementation(libs.androidx.media3.common)
+  implementation(libs.jaudiotagger)
+  implementation("androidx.documentfile:documentfile:1.0.1")
 }
