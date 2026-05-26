@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Elegant Gold Outer Circular Frame -->
+    <path
+        android:pathData="M54,18 A36,36 0 1,1 53.9,18 Z"
+        android:strokeColor="#C8982A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+        
+    <!-- Phase Shifted Secondary Sine Wave (Light Muted Emas) -->
+    <path
+        android:pathData="M 33,52 C 37,42 41,41 45,52 C 49,63 53,63 57,52 C 61,41 65,41 69,52 C 73,63 77,59 81,52"
+        android:strokeColor="#7A5A18"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Primary Accent Sine Wave (Bright Amber Gold) -->
+    <path
+        android:pathData="M 28,50 C 32,38 36,38 40,50 C 44,62 48,62 52,50 C 56,38 60,38 64,50 C 68,62 72,62 76,50"
+        android:strokeColor="#E8B84B"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+</vector>

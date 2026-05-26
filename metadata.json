@@ -1,0 +1,6 @@
+{
+  "name": "Arima Pro",
+  "description": "Audiophile-grade music player featuring high-res playback, custom dual VU meters, 10-band EQ, and USB DAC monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
