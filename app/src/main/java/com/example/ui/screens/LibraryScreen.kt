@@ -50,8 +50,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
-    viewModel: AudioViewModel,
-    onOpenMenu: () -> Unit
+    viewModel: AudioViewModel
 ) {
     val context = LocalContext.current
     val openDirectoryLauncher = rememberLauncherForActivityResult(
@@ -98,16 +97,7 @@ fun LibraryScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(
-                    onClick = onOpenMenu,
-                    modifier = Modifier.testTag("menu_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Menu",
-                        tint = TextPrimary
-                    )
-                }
+                Spacer(modifier = Modifier.size(48.dp))
 
                 Text(
                     text = "ARIMA PRO",
