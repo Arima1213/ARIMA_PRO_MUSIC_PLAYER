@@ -204,7 +204,7 @@ fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
                 ) {
                     Text("PREAMPLIFIER", style = LabelCaps.copy(color = TextSecondary))
                     Text(
-                        text = String.format("%+.1f dB", preamp),
+                        text = String.format(java.util.Locale.US, "%+.1f dB", preamp),
                         style = TechnicalSmall.copy(fontWeight = FontWeight.Bold, color = AmberGold)
                     )
                 }
@@ -242,7 +242,7 @@ fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
                         modifier = Modifier.width(44.dp)
                     ) {
                         Text(
-                            text = String.format("%+.1f", gainValue),
+                            text = String.format(java.util.Locale.US, "%+.1f", gainValue),
                             style = TechnicalSmall.copy(fontSize = 10.sp, color = if (enabled) AmberGlow else TextMuted)
                         )
                         

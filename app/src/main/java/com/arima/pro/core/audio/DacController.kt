@@ -37,10 +37,34 @@ class DacController(private val context: Context) {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(usbReceiver, filter)
+        try {
+            // Try with RECEIVER_EXPORTED first
+            androidx.core.content.ContextCompat.registerReceiver(
+                context,
+                usbReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
+            android.util.Log.d("DacController", "Registered usbReceiver successfully with RECEIVER_EXPORTED")
+        } catch (e1: Throwable) {
+            android.util.Log.e("DacController", "Failed to register usbReceiver with RECEIVER_EXPORTED: ${e1.message}. Trying RECEIVER_NOT_EXPORTED...")
+            try {
+                androidx.core.content.ContextCompat.registerReceiver(
+                    context,
+                    usbReceiver,
+                    filter,
+                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                android.util.Log.d("DacController", "Registered usbReceiver successfully with RECEIVER_NOT_EXPORTED")
+            } catch (e2: Throwable) {
+                android.util.Log.e("DacController", "Failed to register usbReceiver with RECEIVER_NOT_EXPORTED: ${e2.message}. Trying generic context.registerReceiver...")
+                try {
+                    context.registerReceiver(usbReceiver, filter)
+                    android.util.Log.d("DacController", "Registered usbReceiver successfully without flags")
+                } catch (e3: Throwable) {
+                    android.util.Log.e("DacController", "Fatal: Failed to register usbReceiver: ${e3.message}")
+                }
+            }
         }
         updateDacDetection()
     }
@@ -83,24 +107,25 @@ class DacController(private val context: Context) {
     }
 
     fun updateDacDetection() {
-        val connectedDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val usbAudioDevice = connectedDevices.find { it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET }
+        try {
+            val connectedDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val usbAudioDevice = connectedDevices.find { it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET }
 
-        if (usbAudioDevice != null) {
-            val usbDevicesList = usbManager.deviceList
-            var matchingUsbDevice: UsbDevice? = null
+            if (usbAudioDevice != null) {
+                val usbDevicesList = usbManager.deviceList
+                var matchingUsbDevice: UsbDevice? = null
 
-            for (device in usbDevicesList.values) {
-                if (device.deviceClass == 1 || device.deviceClass == 0) {
-                    matchingUsbDevice = device
-                    break
+                for (device in usbDevicesList.values) {
+                    if (device.deviceClass == 1 || device.deviceClass == 0) {
+                        matchingUsbDevice = device
+                        break
+                    }
                 }
-            }
 
-            val rawName = usbAudioDevice.productName.toString().ifEmpty { matchingUsbDevice?.productName ?: "High-Res DAC" }
-            val manufacturer = matchingUsbDevice?.manufacturerName ?: "USB Audiophile"
-            val vendorId = matchingUsbDevice?.vendorId ?: 0x1851
-            val productId = matchingUsbDevice?.productId ?: 0x5101
+                val rawName = usbAudioDevice.productName.toString().ifEmpty { matchingUsbDevice?.productName ?: "High-Res DAC" }
+                val manufacturer = matchingUsbDevice?.manufacturerName ?: "USB Audiophile"
+                val vendorId = matchingUsbDevice?.vendorId ?: 0x1851
+                val productId = matchingUsbDevice?.productId ?: 0x5101
             
             val vIdHex = "0x" + String.format("%04x", vendorId)
             val pIdHex = "0x" + String.format("%04x", productId)
@@ -112,8 +137,33 @@ class DacController(private val context: Context) {
 
             val name = matchedChip?.description ?: rawName
             val isKnownHighRes = name.contains("DragonFly", ignoreCase = true) || name.contains("iFi", ignoreCase = true) || name.contains("FiiO", ignoreCase = true) || matchedChip != null
-            val maxSampleRate = if (isKnownHighRes || name.contains("Pro", ignoreCase = true)) 768000 else 384000
-            val maxBitDepth = if (name.contains("32bit", ignoreCase = true) || maxSampleRate > 384000) 32 else 24
+            val devSampleRates = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                usbAudioDevice.sampleRates
+            } else {
+                null
+            }
+            val maxSampleRate = if (devSampleRates != null && devSampleRates.size > 0) {
+                devSampleRates.toList().maxOrNull() ?: 384000
+            } else {
+                if (isKnownHighRes || name.contains("Pro", ignoreCase = true)) 768000 else 384000
+            }
+            val devEncodings = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                usbAudioDevice.encodings
+            } else {
+                null
+            }
+            val maxBitDepth = if (devEncodings != null && devEncodings.size > 0) {
+                val encList = devEncodings.toList()
+                if (encList.any { it == 22 } || encList.any { it == 4 }) {
+                    32
+                } else if (encList.any { it == 21 } || encList.any { it == 13 }) {
+                    24
+                } else {
+                    24
+                }
+            } else {
+                if (name.contains("32bit", ignoreCase = true) || maxSampleRate > 384000) 32 else 24
+            }
 
             val info = DacInfo(
                 name = name,
@@ -136,6 +186,10 @@ class DacController(private val context: Context) {
             )
             _dacState.value = DacState.Detected(info)
         } else {
+            _dacState.value = DacState.NotDetected
+        }
+        } catch (e: Throwable) {
+            android.util.Log.e("DacController", "Error during updateDacDetection: ${e.message}")
             _dacState.value = DacState.NotDetected
         }
     }

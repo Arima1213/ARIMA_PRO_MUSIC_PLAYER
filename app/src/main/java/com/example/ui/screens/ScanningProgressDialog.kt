@@ -107,7 +107,7 @@ fun ScanningProgressDialog(
                         style = LabelCaps.copy(color = TextSecondary, fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = String.format("%.0f%%", progress * 100f),
+                        text = String.format(java.util.Locale.US, "%.0f%%", progress * 100f),
                         style = TechnicalSmall.copy(fontWeight = FontWeight.Black, color = AmberGold)
                     )
                 }

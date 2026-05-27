@@ -16,5 +16,6 @@ data class SongEntity(
     val fileSize: String,
     val path: String,
     val folderPath: String,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val albumArt: ByteArray? = null
 )

@@ -28,16 +28,7 @@ class PlayerService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
-            
-        val player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
-            .build()
-            
+        val player = PlayerHolder.getOrCreatePlayer(this)
         sharedPlayer = player
         
         mediaSession = MediaSession.Builder(this, player).build()
@@ -48,6 +39,21 @@ class PlayerService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Do NOT call super.onTaskRemoved(rootIntent) if music is playing so it survives swipe
+        val player = sharedPlayer
+        if (player != null && player.isPlaying) {
+            android.util.Log.d("PlayerService", "Task removed, player playing. Surviving task removal.")
+        } else {
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
@@ -66,9 +72,11 @@ class PlayerService : MediaSessionService() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Playback Controls",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "High-Res audio playback notification"
+                description = "High-Res audio playback controls"
+                setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)

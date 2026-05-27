@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -35,6 +36,8 @@ import androidx.compose.ui.unit.sp
 import com.example.domain.model.Song
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun CustomPauseIcon(color: Color, modifier: Modifier = Modifier) {
@@ -231,6 +234,23 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                     .heightIn(max = finalAlbumArtConstraintSize),
                 contentAlignment = Alignment.Center
             ) {
+                val albumArt = currentSong?.albumArt
+                val bitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = albumArt) {
+                    if (albumArt != null) {
+                        withContext(Dispatchers.IO) {
+                            try {
+                                android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
+                                    value = bmp.asImageBitmap()
+                                }
+                            } catch (e: Exception) {
+                                value = null
+                            }
+                        }
+                    } else {
+                        value = null
+                    }
+                }
+                val bitmap = bitmapState.value
                 Box(
                     modifier = Modifier
                         .aspectRatio(1f)
@@ -240,10 +260,19 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (currentSong?.album?.contains("Acoustic") == true || currentSong?.album?.contains("Quantum") == true) {
-                        RotatingReelsTape(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                    if (bitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bitmap,
+                            contentDescription = "Album Art",
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
                     } else {
-                        DynamicVinylDisc(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                        if (currentSong?.album?.contains("Acoustic") == true || currentSong?.album?.contains("Quantum") == true) {
+                            RotatingReelsTape(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                        } else {
+                            DynamicVinylDisc(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                        }
                     }
                 }
             }
@@ -352,7 +381,33 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                         .background(BackgroundCard),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    VinylArtVector(modifier = Modifier.fillMaxSize())
+                                    val itemArt = song.albumArt
+                                    val itemBitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = itemArt) {
+                                        if (itemArt != null) {
+                                            withContext(Dispatchers.IO) {
+                                                try {
+                                                    android.graphics.BitmapFactory.decodeByteArray(itemArt, 0, itemArt.size)?.let { bmp ->
+                                                        value = bmp.asImageBitmap()
+                                                    }
+                                                } catch (e: Exception) {
+                                                    value = null
+                                                }
+                                            }
+                                        } else {
+                                            value = null
+                                        }
+                                    }
+                                    val itemBitmap = itemBitmapState.value
+                                    if (itemBitmap != null) {
+                                        androidx.compose.foundation.Image(
+                                            bitmap = itemBitmap,
+                                            contentDescription = "Album Art",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        VinylArtVector(modifier = Modifier.fillMaxSize())
+                                    }
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -409,6 +464,23 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val itemArt = song.albumArt
+                            val itemBitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = itemArt) {
+                                if (itemArt != null) {
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            android.graphics.BitmapFactory.decodeByteArray(itemArt, 0, itemArt.size)?.let { bmp ->
+                                                value = bmp.asImageBitmap()
+                                            }
+                                        } catch (e: Exception) {
+                                            value = null
+                                        }
+                                    }
+                                } else {
+                                    value = null
+                                }
+                            }
+                            val itemBitmap = itemBitmapState.value
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
@@ -416,7 +488,16 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                     .background(BackgroundPrimary),
                                 contentAlignment = Alignment.Center
                             ) {
-                                VinylArtVector(modifier = Modifier.fillMaxSize())
+                                if (itemBitmap != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = itemBitmap,
+                                        contentDescription = "Album Art",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    VinylArtVector(modifier = Modifier.fillMaxSize())
+                                }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {

@@ -20,43 +20,69 @@ class AudioEngine(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var progressJob: Job? = null
     private var vuJob: Job? = null
+    private val outputManager = com.arima.pro.core.audio.AudioOutputManager(context)
 
-    private var mPlayer: ExoPlayer? = null
-    private val player: ExoPlayer get() = getOrInitPlayer()
+    var dacExclusiveModeActive = true
+    val showDacMissingDialog = MutableStateFlow(false)
+    val volumeNormalizationEnabled = MutableStateFlow(true)
+    val gaplessPlaybackEnabled = MutableStateFlow(true)
 
-    private fun getOrInitPlayer(): ExoPlayer {
-        val active = mPlayer
-        if (active != null) return active
+    private val player: ExoPlayer get() = PlayerHolder.getOrCreatePlayer(context)
 
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
-        val newPlayer = ExoPlayer.Builder(context.applicationContext)
-            .setAudioAttributes(audioAttributes, true)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
-            .build().apply {
-                addListener(object : Player.Listener {
-                    override fun onIsPlayingChanged(isPlayingChange: Boolean) {
-                        _isPlaying.value = isPlayingChange
-                        if (isPlayingChange) {
-                            startProgressLoop()
-                            startVuLoop()
-                        } else {
-                            stopProgressLoop()
-                            decayVuLevels()
-                        }
-                    }
-
-                    override fun onPlaybackStateChanged(state: Int) {
-                        if (state == Player.STATE_ENDED) {
-                            skipToNext()
-                        }
-                    }
-                })
+    private val playbackListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlayingChange: Boolean) {
+            _isPlaying.value = isPlayingChange
+            if (isPlayingChange) {
+                startProgressLoop()
+                startVuLoop()
+            } else {
+                stopProgressLoop()
+                decayVuLevels()
             }
-        mPlayer = newPlayer
-        return newPlayer
+        }
+
+        override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_ENDED) {
+                if (!gaplessPlaybackEnabled.value) {
+                    scope.launch {
+                        delay(1500) // Insert 1.5s silence gap
+                        skipToNext()
+                    }
+                } else {
+                    skipToNext()
+                }
+            }
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (mediaItem != null) {
+                val mediaId = mediaItem.mediaId
+                val matchedSong = _playbackQueue.value.firstOrNull { it.id.toString() == mediaId }
+                if (matchedSong != null) {
+                    _currentSong.value = matchedSong
+                    
+                    // Sync Volume Normalization dynamically on transitions
+                    var trackGain = 0f
+                    if (volumeNormalizationEnabled.value && matchedSong.path.isNotEmpty()) {
+                        trackGain = PlayerHolder.getReplayGain(context, matchedSong.path)
+                    }
+                    PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
+                }
+            }
+        }
+    }
+
+    init {
+        try {
+            player.removeListener(playbackListener)
+            player.addListener(playbackListener)
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error adding playback listener in init: ${e.message}")
+        }
+    }
+
+    fun applyEqualizer(enabled: Boolean, bandGains: List<Float>) {
+        PlayerHolder.equalizerEngine.applySettings(enabled, bandGains)
     }
 
     private fun isDacConnected(): Boolean {
@@ -111,8 +137,29 @@ class AudioEngine(private val context: Context) {
 
         scope.launch {
             try {
+                // Check for DAC Exclusive Mode blocking
+                if (dacExclusiveModeActive && !isDacConnected()) {
+                    showDacMissingDialog.value = true
+                    _isPlaying.value = false
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Hubungkan DAC untuk memutar (DAC Exclusive Mode Aktif)",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    return@launch
+                }
+                showDacMissingDialog.value = false
+
                 // Initialize player if null
-                val activePlayer = getOrInitPlayer()
+                val activePlayer = player
+                try {
+                    activePlayer.removeListener(playbackListener)
+                    activePlayer.addListener(playbackListener)
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Error re-attaching listener in playSong: ${e.message}")
+                }
 
                 val fileUri = if (song.path.startsWith("content://")) {
                     Uri.parse(song.path)
@@ -146,22 +193,52 @@ class AudioEngine(private val context: Context) {
                     }
                 }
 
-                // Check for DAC routing
-                val dacActive = isDacConnected()
-                if (dacActive) {
-                    android.util.Log.d("AudioEngine", "High-Res USB DAC connected. Directing routing.")
-                    android.widget.Toast.makeText(context, "Routing audio directly to USB DAC", android.widget.Toast.LENGTH_SHORT).show()
-                } else {
-                    android.util.Log.d("AudioEngine", "No DAC. Directing routing to Speaker.")
+                // Setup Volume Normalization on track loading
+                var trackGain = 0f
+                if (volumeNormalizationEnabled.value && song.path.isNotEmpty()) {
+                    // Fetch ReplayGain from track tags
+                    val rawGain = PlayerHolder.getReplayGain(context, song.path)
+                    // If tag present, calibrate from ReplayGain default (-18 LUFS) to EBU R128 target (-23 LUFS) by shifting -5 dB
+                    trackGain = if (rawGain != 0f) rawGain - 5.0f else -14.0f // Fallback to -14 dB (typical attenuation for EBU R128 match)
+                }
+                PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
+
+                try {
+                    val serviceIntent = android.content.Intent(context, PlayerService::class.java)
+                    context.startService(serviceIntent)
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
                 }
 
-                val mediaItem = MediaItem.Builder()
-                    .setUri(fileUri)
-                    .setMediaId(song.id.toString())
-                    .build()
+                if (gaplessPlaybackEnabled.value) {
+                    // Populate multi-item playlist internally for native seamless transition
+                    val mediaItems = _playbackQueue.value.map { qSong ->
+                        val uri = if (qSong.path.startsWith("content://")) {
+                            Uri.parse(qSong.path)
+                        } else {
+                            Uri.fromFile(java.io.File(qSong.path))
+                        }
+                        MediaItem.Builder()
+                            .setUri(uri)
+                            .setMediaId(qSong.id.toString())
+                            .build()
+                    }
+                    val index = _playbackQueue.value.indexOfFirst { it.id == song.id }.coerceIn(0, mediaItems.size - 1)
+                    activePlayer.setMediaItems(mediaItems, index, 0L)
+                } else {
+                    // Single item mode
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(fileUri)
+                        .setMediaId(song.id.toString())
+                        .build()
+                    activePlayer.setMediaItem(mediaItem)
+                }
 
-                activePlayer.setMediaItem(mediaItem)
                 activePlayer.prepare()
+                
+                // Route to DAC (Must be done AFTER prepare() as requested)
+                outputManager.routeToDac(activePlayer)
+                
                 activePlayer.play()
 
             } catch (e: SecurityException) {
@@ -186,8 +263,8 @@ class AudioEngine(private val context: Context) {
                 e.printStackTrace()
                 android.util.Log.e("AudioEngine", "IllegalStateException during play: ${e.message}")
                 // Release and re-initialize player
-                mPlayer?.release()
-                mPlayer = null
+                PlayerHolder.player?.release()
+                PlayerHolder.player = null
                 _isPlaying.value = false
                 android.widget.Toast.makeText(
                     context, 
@@ -397,7 +474,7 @@ class AudioEngine(private val context: Context) {
 
     fun release() {
         scope.cancel()
-        mPlayer?.release()
-        mPlayer = null
+        PlayerHolder.player?.release()
+        PlayerHolder.player = null
     }
 }
