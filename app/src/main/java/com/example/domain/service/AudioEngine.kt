@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.domain.model.Song
+import com.arima.pro.core.audio.PlayerHolder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -210,27 +211,39 @@ class AudioEngine(private val context: Context) {
                     android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
                 }
 
+                val createMediaItem = { qSong: Song ->
+                    val uri = if (qSong.path.startsWith("content://")) {
+                        Uri.parse(qSong.path)
+                    } else {
+                        Uri.fromFile(java.io.File(qSong.path))
+                    }
+                    val metadata = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(qSong.title)
+                        .setArtist(qSong.artist)
+                        .setAlbumTitle(qSong.album)
+                        .apply {
+                            if (qSong.albumArt != null) {
+                                setArtworkData(qSong.albumArt, androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                            }
+                        }
+                        .build()
+                    MediaItem.Builder()
+                        .setUri(uri)
+                        .setMediaId(qSong.id.toString())
+                        .setMediaMetadata(metadata)
+                        .build()
+                }
+
                 if (gaplessPlaybackEnabled.value) {
                     // Populate multi-item playlist internally for native seamless transition
                     val mediaItems = _playbackQueue.value.map { qSong ->
-                        val uri = if (qSong.path.startsWith("content://")) {
-                            Uri.parse(qSong.path)
-                        } else {
-                            Uri.fromFile(java.io.File(qSong.path))
-                        }
-                        MediaItem.Builder()
-                            .setUri(uri)
-                            .setMediaId(qSong.id.toString())
-                            .build()
+                        createMediaItem(qSong)
                     }
                     val index = _playbackQueue.value.indexOfFirst { it.id == song.id }.coerceIn(0, mediaItems.size - 1)
                     activePlayer.setMediaItems(mediaItems, index, 0L)
                 } else {
                     // Single item mode
-                    val mediaItem = MediaItem.Builder()
-                        .setUri(fileUri)
-                        .setMediaId(song.id.toString())
-                        .build()
+                    val mediaItem = createMediaItem(song)
                     activePlayer.setMediaItem(mediaItem)
                 }
 

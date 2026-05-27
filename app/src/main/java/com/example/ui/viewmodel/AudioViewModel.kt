@@ -135,7 +135,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
             combine(resamplingRate, bitPerfectMode) { rate, bitPerfect ->
                 if (bitPerfect) "Bit-perfect" else rate
             }.collect { rate ->
-                com.example.domain.service.PlayerHolder.applyResampling(rate)
+                com.arima.pro.core.audio.PlayerHolder.applyResampling(rate)
             }
         }
         // Sync Dithering Trigger
@@ -143,26 +143,26 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
             combine(ditheringEnabled, bitPerfectMode) { enabled, bitPerfect ->
                 enabled && !bitPerfect
             }.collect { enabled ->
-                com.example.domain.service.PlayerHolder.applyDithering(enabled)
+                com.arima.pro.core.audio.PlayerHolder.applyDithering(enabled)
             }
         }
         // Sync USB Buffer Size and rebuild AudioTrack
         viewModelScope.launch {
             usbBufferSize.collect { size ->
-                com.example.domain.service.PlayerHolder.applyBufferSize(application, size)
+                com.arima.pro.core.audio.PlayerHolder.applyBufferSize(application, size)
             }
         }
         // Sync DSD Playback Mode
         viewModelScope.launch {
             dsdNativeMode.collect { mode ->
-                com.example.domain.service.PlayerHolder.dopModeActive = 
+                com.arima.pro.core.audio.PlayerHolder.dopModeActive = 
                     mode.contains("DoP", ignoreCase = true) || mode.contains("Marker", ignoreCase = true)
             }
         }
         // Sync Bit-perfect Active state on changes
         viewModelScope.launch {
             bitPerfectMode.collect { enabled ->
-                com.example.domain.service.PlayerHolder.bitPerfectActive = enabled
+                com.arima.pro.core.audio.PlayerHolder.bitPerfectActive = enabled
                 if (enabled) {
                     resamplingRate.value = "Bit-perfect"
                     ditheringEnabled.value = false

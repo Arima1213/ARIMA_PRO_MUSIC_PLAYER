@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class AudioEngine(private val context: Context) {
 
-    private var exoPlayer: ExoPlayer? = null
+    private val exoPlayer: ExoPlayer get() = PlayerHolder.getOrCreatePlayer(context)
     
     private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
     private val playbackStateFlow: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -22,43 +22,39 @@ class AudioEngine(private val context: Context) {
 
     private val queue = mutableListOf<Track>()
 
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(state: Int) {
+            _playbackState.value = when (state) {
+                Player.STATE_IDLE -> PlaybackState.IDLE
+                Player.STATE_BUFFERING -> PlaybackState.BUFFERING
+                Player.STATE_READY -> {
+                    if (exoPlayer.isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
+                }
+                Player.STATE_ENDED -> PlaybackState.IDLE
+                else -> PlaybackState.IDLE
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlayingChange: Boolean) {
+            if (exoPlayer.playbackState == Player.STATE_READY) {
+                _playbackState.value = if (isPlayingChange) PlaybackState.PLAYING else PlaybackState.PAUSED
+            }
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            mediaItem?.let { item ->
+                val trackId = item.mediaId
+                val track = queue.find { it.id == trackId }
+                if (track != null) {
+                    _currentTrack.value = track
+                }
+            }
+        }
+    }
+
     init {
         try {
-            exoPlayer = ExoPlayer.Builder(context.applicationContext)
-                .build()
-                .apply {
-                    setWakeMode(C.WAKE_MODE_LOCAL)
-                    
-                    addListener(object : Player.Listener {
-                        override fun onPlaybackStateChanged(state: Int) {
-                            _playbackState.value = when (state) {
-                                Player.STATE_IDLE -> PlaybackState.IDLE
-                                Player.STATE_BUFFERING -> PlaybackState.BUFFERING
-                                Player.STATE_READY -> {
-                                    if (isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
-                                }
-                                Player.STATE_ENDED -> PlaybackState.IDLE
-                                else -> PlaybackState.IDLE
-                            }
-                        }
-
-                        override fun onIsPlayingChanged(isPlayingChange: Boolean) {
-                            if (exoPlayer?.playbackState == Player.STATE_READY) {
-                                _playbackState.value = if (isPlayingChange) PlaybackState.PLAYING else PlaybackState.PAUSED
-                            }
-                        }
-
-                        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                            mediaItem?.let { item ->
-                                val trackId = item.mediaId
-                                val track = queue.find { it.id == trackId }
-                                if (track != null) {
-                                    _currentTrack.value = track
-                                }
-                            }
-                        }
-                    })
-                }
+            exoPlayer.addListener(playerListener)
         } catch (e: Exception) {
             _playbackState.value = PlaybackState.ERROR
         }
@@ -83,11 +79,9 @@ class AudioEngine(private val context: Context) {
         }
         _currentTrack.value = finalTrack
 
-        exoPlayer?.let { player ->
-            player.setMediaItem(MediaItem.Builder().setUri(uri).setMediaId(finalTrack.id).build())
-            player.prepare()
-            player.play()
-        }
+        exoPlayer.setMediaItem(MediaItem.Builder().setUri(uri).setMediaId(finalTrack.id).build())
+        exoPlayer.prepare()
+        exoPlayer.play()
     }
 
     fun play(uriString: String) {
@@ -95,16 +89,16 @@ class AudioEngine(private val context: Context) {
     }
 
     fun pause() {
-        exoPlayer?.pause()
+        exoPlayer.pause()
     }
 
     fun stop() {
-        exoPlayer?.stop()
+        exoPlayer.stop()
         _playbackState.value = PlaybackState.IDLE
     }
 
     fun seek(positionMs: Long) {
-        exoPlayer?.seekTo(positionMs)
+        exoPlayer.seekTo(positionMs)
     }
 
     fun getPlaybackState(): StateFlow<PlaybackState> {
@@ -118,7 +112,7 @@ class AudioEngine(private val context: Context) {
     fun addToQueue(track: Track) {
         if (!queue.contains(track)) {
             queue.add(track)
-            exoPlayer?.addMediaItem(MediaItem.Builder().setUri(track.uri).setMediaId(track.id).build())
+            exoPlayer.addMediaItem(MediaItem.Builder().setUri(track.uri).setMediaId(track.id).build())
         }
     }
 
@@ -126,19 +120,22 @@ class AudioEngine(private val context: Context) {
         val currentIndex = queue.indexOf(_currentTrack.value)
         val targetIndex = if (currentIndex == -1) 0 else currentIndex + 1
         queue.add(targetIndex, track)
-        exoPlayer?.addMediaItem(targetIndex, MediaItem.Builder().setUri(track.uri).setMediaId(track.id).build())
+        exoPlayer.addMediaItem(targetIndex, MediaItem.Builder().setUri(track.uri).setMediaId(track.id).build())
     }
 
     fun removeFromQueue(track: Track) {
         val index = queue.indexOf(track)
         if (index != -1) {
             queue.removeAt(index)
-            exoPlayer?.removeMediaItem(index)
+            exoPlayer.removeMediaItem(index)
         }
     }
 
     fun release() {
-        exoPlayer?.release()
-        exoPlayer = null
+        try {
+            exoPlayer.removeListener(playerListener)
+        } catch (e: Exception) {
+            // Safe ignore
+        }
     }
 }

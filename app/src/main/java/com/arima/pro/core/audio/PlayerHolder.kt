@@ -1,26 +1,47 @@
-package com.example.domain.service
+package com.arima.pro.core.audio
 
 import android.content.Context
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.arima.pro.core.audio.DsdDataSource
 
 object PlayerHolder {
     var player: ExoPlayer? = null
-    val equalizerEngine = EqualizerEngine()
+    val equalizerEngine = com.example.domain.service.EqualizerEngine()
     
     // Audio Path Processors
-    val resamplingAudioProcessor = com.arima.pro.core.audio.ResamplingAudioProcessor()
-    val ditheringAudioProcessor = com.arima.pro.core.audio.DitheringAudioProcessor()
-    val gainNormalizationAudioProcessor = com.arima.pro.core.audio.GainNormalizationAudioProcessor()
+    val resamplingAudioProcessor = ResamplingAudioProcessor()
+    val ditheringAudioProcessor = DitheringAudioProcessor()
+    val gainNormalizationAudioProcessor = GainNormalizationAudioProcessor()
     
     // Control States
     var bitPerfectActive = false
     var bufferMs = 200 // Default: Max Latency (Stable)
     var dopModeActive = false
 
+    // Step 1 requested API methods:
+    fun applyResamplingSettings(targetSampleRate: Int) {
+        if (bitPerfectActive) {
+            resamplingAudioProcessor.setTargetSampleRate(0)
+            return
+        }
+        resamplingAudioProcessor.setTargetSampleRate(targetSampleRate)
+        android.util.Log.d("PlayerHolder", "Applied resampling rate (Hz): $targetSampleRate")
+    }
+
+    fun applyDitheringSettings(enabled: Boolean) {
+        val activeValue = enabled && !bitPerfectActive
+        ditheringAudioProcessor.setDitheringEnabled(activeValue)
+    }
+
+    fun applyNormalizationSettings(enabled: Boolean, gainDb: Float) {
+        val activeValue = enabled && !bitPerfectActive
+        gainNormalizationAudioProcessor.setNormalizationEnabled(activeValue)
+        gainNormalizationAudioProcessor.setGainDb(gainDb)
+    }
+
+    // Compatibility functions for currently existing codebase:
     fun applyResampling(resamplingRateStr: String) {
         if (bitPerfectActive) {
             resamplingAudioProcessor.setTargetSampleRate(0)
@@ -32,19 +53,15 @@ object PlayerHolder {
             "384 kHz" -> 384000
             else -> 0 // Bit-perfect / no resampling
         }
-        resamplingAudioProcessor.setTargetSampleRate(sampleRate)
-        android.util.Log.d("PlayerHolder", "Applied resampling rate: $resamplingRateStr ($sampleRate Hz)")
+        applyResamplingSettings(sampleRate)
     }
 
     fun applyDithering(enabled: Boolean) {
-        val activeValue = enabled && !bitPerfectActive
-        ditheringAudioProcessor.setDitheringEnabled(activeValue)
+        applyDitheringSettings(enabled)
     }
 
     fun setVolumeNormalization(enabled: Boolean, gainDb: Float) {
-        val activeValue = enabled && !bitPerfectActive
-        gainNormalizationAudioProcessor.setNormalizationEnabled(activeValue)
-        gainNormalizationAudioProcessor.setGainDb(gainDb)
+        applyNormalizationSettings(enabled, gainDb)
     }
 
     fun applyBufferSize(context: Context, sizeStr: String) {
