@@ -48,9 +48,13 @@ class PlayerService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Do NOT call super.onTaskRemoved(rootIntent) if music is playing so it survives swipe
         val player = sharedPlayer
-        if (player != null && player.isPlaying) {
+        val isPlaying = if (player != null) {
+            try { player.isPlaying } catch (e: Exception) { false }
+        } else {
+            false
+        }
+        if (player != null && isPlaying) {
             android.util.Log.d("PlayerService", "Task removed, player playing. Surviving task removal.")
         } else {
             stopSelf()
@@ -58,12 +62,25 @@ class PlayerService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        mediaSession?.run {
-            player.release()
-            release()
-            mediaSession = null
-            sharedSession = null
+        try {
+            mediaSession?.run {
+                try {
+                    player.release()
+                } catch (e: Exception) {
+                    android.util.Log.e("PlayerService", "Error releasing player in onDestroy: ${e.message}")
+                }
+                try {
+                    release()
+                } catch (e: Exception) {
+                    android.util.Log.e("PlayerService", "Error releasing session in onDestroy: ${e.message}")
+                }
+                mediaSession = null
+                sharedSession = null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerService", "Error in onDestroy(): ${e.message}")
         }
+        PlayerHolder.player = null
         sharedPlayer = null
         super.onDestroy()
     }

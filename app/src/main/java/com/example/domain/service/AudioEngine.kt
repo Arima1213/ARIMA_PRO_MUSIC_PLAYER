@@ -333,7 +333,11 @@ class AudioEngine(private val context: Context) {
                     playSong(updatedList.first())
                 }
             } else {
-                player.stop()
+                try {
+                    player.stop()
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Error stopping player in removeFromQueue: ${e.message}")
+                }
                 _currentSong.value = null
                 _currentPosition.value = 0L
                 _isPlaying.value = false
@@ -347,15 +351,25 @@ class AudioEngine(private val context: Context) {
         }
         val current = _currentSong.value ?: return
 
-        if (!player.isPlaying && player.playbackState == Player.STATE_IDLE) {
-            playSong(current)
-        } else {
-            player.play()
+        try {
+            val isPlaying = try { player.isPlaying } catch (e: Exception) { false }
+            val state = try { player.playbackState } catch (e: Exception) { Player.STATE_IDLE }
+            if (!isPlaying && state == Player.STATE_IDLE) {
+                playSong(current)
+            } else {
+                player.play()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error in play(): ${e.message}")
         }
     }
 
     fun pause() {
-        player.pause()
+        try {
+            player.pause()
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error in pause(): ${e.message}")
+        }
     }
 
     fun skipToNext() {
@@ -390,15 +404,27 @@ class AudioEngine(private val context: Context) {
         val song = _currentSong.value ?: return
         val clamped = position.coerceIn(0L, song.duration)
         _currentPosition.value = clamped
-        player.seekTo(clamped)
+        try {
+            player.seekTo(clamped)
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error in seekTo(): ${e.message}")
+        }
     }
 
     private fun startProgressLoop() {
         progressJob?.cancel()
         progressJob = scope.launch(Dispatchers.Main) {
-            while (isActive && player.isPlaying) {
-                _currentPosition.value = player.currentPosition
-                delay(100)
+            try {
+                while (isActive) {
+                    val isPlaying = try { player.isPlaying } catch (e: Exception) { false }
+                    if (!isPlaying) break
+                    
+                    val pos = try { player.currentPosition } catch (e: Exception) { 0L }
+                    _currentPosition.value = pos
+                    delay(100)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AudioEngine", "Error in progress loop: ${e.message}")
             }
         }
     }
@@ -416,51 +442,58 @@ class AudioEngine(private val context: Context) {
             var leftPeakTimer = 0
             var rightPeakTimer = 0
 
-            while (isActive && player.isPlaying) {
-                delay(16) // ~60 FPS dynamic and fluent rendering loop
+            try {
+                while (isActive) {
+                    val isPlaying = try { player.isPlaying } catch (e: Exception) { false }
+                    if (!isPlaying) break
 
-                // Dynamic, rhythmic base volume simulation resembling music peaks
-                val baseL = Random.nextFloat() * 20f - 18f
-                val baseR = Random.nextFloat() * 20f - 18f
+                    delay(16) // ~60 FPS dynamic and fluent rendering loop
 
-                // LFO factor to simulate regular drums / bass pulses naturally
-                val timeFactor = (System.currentTimeMillis() % 1000) / 1000f
-                val dynamicSwing = kotlin.math.sin(timeFactor * Math.PI * 4).toFloat() * 10f
+                    // Dynamic, rhythmic base volume simulation resembling music peaks
+                    val baseL = Random.nextFloat() * 20f - 18f
+                    val baseR = Random.nextFloat() * 20f - 18f
 
-                val targetL = (baseL + dynamicSwing).coerceIn(-48.0f, -1.0f)
-                val targetR = (baseR + dynamicSwing).coerceIn(-48.0f, -2.0f)
+                    // LFO factor to simulate regular drums / bass pulses naturally
+                    val timeFactor = (System.currentTimeMillis() % 1000) / 1000f
+                    val dynamicSwing = kotlin.math.sin(timeFactor * Math.PI * 4).toFloat() * 10f
 
-                val currentL = _vuLevels.value.first
-                val currentR = _vuLevels.value.second
+                    val targetL = (baseL + dynamicSwing).coerceIn(-48.0f, -1.0f)
+                    val targetR = (baseR + dynamicSwing).coerceIn(-48.0f, -2.0f)
 
-                // Realistic ballistics: instant rise (attack coefficient 0.7), smooth drop (release coefficient 0.15)
-                val nextL = currentL + (targetL - currentL) * (if (targetL > currentL) 0.7f else 0.15f)
-                val nextR = currentR + (targetR - currentR) * (if (targetR > currentR) 0.7f else 0.15f)
+                    val currentL = _vuLevels.value.first
+                    val currentR = _vuLevels.value.second
 
-                if (nextL > leftPeak) {
-                    leftPeak = nextL
-                    leftPeakTimer = 60 // Hold peak for 1 second at 60 FPS
-                } else {
-                    if (leftPeakTimer > 0) {
-                        leftPeakTimer--
+                    // Realistic ballistics: instant rise (attack coefficient 0.7), smooth drop (release coefficient 0.15)
+                    val nextL = currentL + (targetL - currentL) * (if (targetL > currentL) 0.7f else 0.15f)
+                    val nextR = currentR + (targetR - currentR) * (if (targetR > currentR) 0.7f else 0.15f)
+
+                    if (nextL > leftPeak) {
+                        leftPeak = nextL
+                        leftPeakTimer = 60 // Hold peak for 1 second at 60 FPS
                     } else {
-                        leftPeak = max(-60.0f, leftPeak - 0.5f) // realistic slow peak fallback
+                        if (leftPeakTimer > 0) {
+                            leftPeakTimer--
+                        } else {
+                            leftPeak = max(-60.0f, leftPeak - 0.5f) // realistic slow peak fallback
+                        }
                     }
-                }
 
-                if (nextR > rightPeak) {
-                    rightPeak = nextR
-                    rightPeakTimer = 60
-                } else {
-                    if (rightPeakTimer > 0) {
-                        rightPeakTimer--
+                    if (nextR > rightPeak) {
+                        rightPeak = nextR
+                        rightPeakTimer = 60
                     } else {
-                        rightPeak = max(-60.0f, rightPeak - 0.5f)
+                        if (rightPeakTimer > 0) {
+                            rightPeakTimer--
+                        } else {
+                            rightPeak = max(-60.0f, rightPeak - 0.5f)
+                        }
                     }
-                }
 
-                _vuLevels.value = Pair(nextL, nextR)
-                _peakLevels.value = Pair(leftPeak, rightPeak)
+                    _vuLevels.value = Pair(nextL, nextR)
+                    _peakLevels.value = Pair(leftPeak, rightPeak)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AudioEngine", "Error in VU loop: ${e.message}")
             }
         }
     }
@@ -487,7 +520,30 @@ class AudioEngine(private val context: Context) {
 
     fun release() {
         scope.cancel()
-        PlayerHolder.player?.release()
-        PlayerHolder.player = null
+        // If PlayerService is actively running (sharedPlayer is non-null) and playing, do NOT release the player
+        val servicePlayer = PlayerService.sharedPlayer
+        try {
+            val isPlaying = if (servicePlayer != null) {
+                try { servicePlayer.isPlaying } catch (e: Exception) { false }
+            } else {
+                false
+            }
+            if (servicePlayer != null && isPlaying) {
+                android.util.Log.d("AudioEngine", "AudioEngine released but PlayerService is active. Keeping player alive.")
+            } else {
+                val p = PlayerHolder.player
+                if (p != null) {
+                    try {
+                        p.release()
+                    } catch (e: Exception) {
+                        android.util.Log.e("AudioEngine", "Error releasing PlayerHolder.player: ${e.message}")
+                    }
+                }
+                PlayerHolder.player = null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error in release(): ${e.message}")
+            PlayerHolder.player = null
+        }
     }
 }
