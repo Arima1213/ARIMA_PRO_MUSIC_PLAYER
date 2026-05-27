@@ -5,25 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
@@ -76,118 +68,73 @@ fun MainAppContent(viewModel: AudioViewModel) {
     val scanTracksFound by viewModel.scanTracksFound.collectAsState()
     val scanProgress by viewModel.scanProgress.collectAsState()
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    val navItems = listOf(
+        Triple("library", "Library", Icons.Default.Home),
+        Triple("dac", "DAC", Icons.Default.Info),
+        Triple("settings", "Settings", Icons.Default.Settings),
+        Triple("format_variants", "Codecs", Icons.Default.Star)
+    )
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = Color(0xFF141414),
-                drawerTonalElevation = 0.dp,
-                modifier = Modifier.width(280.dp)
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            NavigationBar(
+                containerColor = BackgroundSurface,
+                contentColor = TextPrimary,
+                tonalElevation = 0.dp,
+                modifier = Modifier.height(64.dp)
             ) {
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Drawer Header
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 20.dp)
-                ) {
-                    Text(
-                        text = "ARIMA PRO",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp
-                        ),
-                        color = AmberGold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "High-Res Audio Engine",
-                        style = BodyMedium.copy(fontSize = 11.sp),
-                        color = TextSecondary
-                    )
-                }
-
-                Divider(color = BorderSubtle, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Navigation Items
-                val menuItems = listOf(
-                    Triple("library", "Library", Icons.Default.Home),
-                    Triple("player", "Now Playing", Icons.Default.PlayArrow),
-                    Triple("dac", "DAC Monitor", Icons.Default.Info),
-                    Triple("settings", "Settings", Icons.Default.Settings),
-                    Triple("format_variants", "Audio Codecs", Icons.Default.Star)
-                )
-
-                menuItems.forEach { (tabId, label, icon) ->
+                navItems.forEach { (tabId, label, icon) ->
                     val isSelected = currentTab == tabId
-                    NavigationDrawerItem(
-                        label = {
-                            Text(
-                                text = label,
-                                style = BodyLarge.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 14.sp
-                                )
-                            )
-                        },
+                    NavigationBarItem(
                         icon = {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = label,
-                                tint = if (isSelected) Color.Black else TextSecondary
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
                             )
                         },
                         selected = isSelected,
-                        onClick = {
-                            viewModel.selectTab(tabId)
-                            scope.launch { drawerState.close() }
-                        },
-                        colors = NavigationDrawerItemDefaults.colors(
-                            selectedContainerColor = AmberGold,
-                            unselectedContainerColor = Color.Transparent,
-                            selectedTextColor = Color.Black,
-                            unselectedTextColor = TextSecondary,
-                            selectedIconColor = Color.Black,
-                            unselectedIconColor = TextSecondary
+                        onClick = { viewModel.selectTab(tabId) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = AmberGold,
+                            unselectedIconColor = TextMuted,
+                            selectedTextColor = AmberGold,
+                            unselectedTextColor = TextMuted,
+                            indicatorColor = Color.Transparent
                         ),
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                            .testTag("drawer_nav_$tabId")
+                        modifier = Modifier.testTag("bottom_nav_$tabId")
                     )
                 }
             }
-        }
-    ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets.navigationBars
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(BackgroundPrimary)
-                    .padding(innerPadding)
-            ) {
-                when (currentTab) {
-                    "library" -> LibraryScreen(
-                        viewModel = viewModel,
-                        onOpenMenu = { scope.launch { drawerState.open() } }
-                    )
-                    "player" -> PlayerScreen(viewModel)
-                    "dac" -> DacMonitorScreen(viewModel)
-                    "settings" -> SettingsScreen(viewModel)
-                    "format_variants" -> FormatBadgeVariantsScreen(viewModel)
-                }
+        },
+        containerColor = BackgroundPrimary
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (currentTab) {
+                "library" -> LibraryScreen(
+                    viewModel = viewModel,
+                    onOpenMenu = { /* drawer removed */ }
+                )
+                "player" -> PlayerScreen(viewModel)
+                "dac" -> DacMonitorScreen(viewModel)
+                "settings" -> SettingsScreen(viewModel)
+                "format_variants" -> FormatBadgeVariantsScreen(viewModel)
             }
 
-            // Sheet components overlay layers
             if (showEqPanel) {
                 EqualizerPanel(
                     viewModel = viewModel,
