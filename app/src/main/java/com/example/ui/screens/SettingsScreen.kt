@@ -91,6 +91,7 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                         sub = "Internal hardware DAC resampling filter rate",
                         currentVal = resamplingVal,
                         options = listOf("Bit-perfect", "96 kHz", "192 kHz", "384 kHz"),
+                        enabled = !bitPerfectVal,
                         onSelect = { viewModel.resamplingRate.value = it }
                     )
                     Divider(color = BorderSubtle, thickness = 0.5.dp)
@@ -99,6 +100,7 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                         label = "Dithering",
                         sub = "Applies triangular noise dither shaping",
                         isChecked = ditheringVal,
+                        enabled = !bitPerfectVal,
                         onCheckedChange = { viewModel.ditheringEnabled.value = it }
                     )
                     Divider(color = BorderSubtle, thickness = 0.5.dp)
@@ -143,7 +145,7 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                         label = "USB Buffer Size",
                         sub = "Buffering size for steady digital transfers",
                         currentVal = bufferVal,
-                        options = listOf("Safe (Medium)", "Max Latency", "Direct Direct"),
+                        options = listOf("Min Latency", "Low Latency", "Normal", "Max Latency (Stable)"),
                         onSelect = { viewModel.usbBufferSize.value = it }
                     )
                     Divider(color = BorderSubtle, thickness = 0.5.dp)
@@ -181,6 +183,7 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                         label = "Equalizer Active State",
                         sub = "Enable digital sound processing filter network",
                         isChecked = eqVal,
+                        enabled = !bitPerfectVal,
                         onCheckedChange = { viewModel.toggleEqualizer(it) }
                     )
                     Divider(color = BorderSubtle, thickness = 0.5.dp)
@@ -188,16 +191,16 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.showEqualizerPanel.value = true }
+                            .clickable(enabled = !bitPerfectVal) { viewModel.showEqualizerPanel.value = true }
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Edit 10-Band Equalizer Presets", style = BodyLarge.copy(fontWeight = FontWeight.Bold))
+                            Text("Edit 10-Band Equalizer Presets", style = BodyLarge.copy(fontWeight = FontWeight.Bold), color = if (!bitPerfectVal) TextPrimary else TextSecondary)
                             Text("Set band frequencies from 32Hz to 16kHz", style = BodyMedium, color = TextSecondary)
                         }
-                        Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "Edit", tint = AmberGold)
+                        Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "Edit", tint = if (!bitPerfectVal) AmberGold else TextSecondary)
                     }
                 }
                 Spacer(modifier = Modifier.height(20.dp))
@@ -322,6 +325,7 @@ fun ToggleSettingRow(
     label: String,
     sub: String,
     isChecked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -332,11 +336,12 @@ fun ToggleSettingRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(text = label, style = BodyLarge.copy(fontWeight = FontWeight.Bold))
+            Text(text = label, style = BodyLarge.copy(fontWeight = FontWeight.Bold), color = if (enabled) TextPrimary else TextSecondary)
             Text(text = sub, style = BodyMedium, color = TextSecondary)
         }
         Switch(
             checked = isChecked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.Black,
@@ -354,6 +359,7 @@ fun DropdownSettingRow(
     sub: String,
     currentVal: String,
     options: List<String>,
+    enabled: Boolean = true,
     onSelect: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -361,33 +367,35 @@ fun DropdownSettingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = true }
+            .clickable(enabled = enabled) { expanded = true }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(text = label, style = BodyLarge.copy(fontWeight = FontWeight.Bold))
+            Text(text = label, style = BodyLarge.copy(fontWeight = FontWeight.Bold), color = if (enabled) TextPrimary else TextSecondary)
             Text(text = sub, style = BodyMedium, color = TextSecondary)
         }
         Box {
             Text(
                 text = "$currentVal ▼",
-                style = TechnicalSmall.copy(fontWeight = FontWeight.Bold, color = AmberGold)
+                style = TechnicalSmall.copy(fontWeight = FontWeight.Bold, color = if (enabled) AmberGold else TextSecondary)
             )
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.background(BackgroundSurface).border(1.dp, BorderDefault)
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option, color = TextPrimary) },
-                        onClick = {
-                            onSelect(option)
-                            expanded = false
-                        }
-                    )
+            if (enabled) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.background(BackgroundSurface).border(1.dp, BorderDefault)
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option, color = TextPrimary) },
+                            onClick = {
+                                onSelect(option)
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
         }

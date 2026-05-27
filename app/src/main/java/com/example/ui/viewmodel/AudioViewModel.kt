@@ -117,16 +117,57 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         seedInitialDataIfNeeded()
         // Sync Equalizer with AudioEngine
         viewModelScope.launch {
-            combine(equalizerEnabled, bandGains) { enabled, gains ->
-                Pair(enabled, gains)
-            }.collect { (enabled, gains) ->
+            combine(equalizerEnabled, bandGains, bitPerfectMode) { enabled, gains, bitPerfect ->
+                Triple(enabled && !bitPerfect, gains, bitPerfect)
+            }.collect { (enabled, gains, _) ->
                 audioEngine.applyEqualizer(enabled, gains)
             }
         }
         // Sync DAC Exclusive Mode
         viewModelScope.launch {
             dacExclusiveMode.collect { enabled ->
+                audioEngine.dacExclusiveModeActive = enabled
                 dacController.enforceExclusiveMode(enabled)
+            }
+        }
+        // Sync Resampling Rate
+        viewModelScope.launch {
+            combine(resamplingRate, bitPerfectMode) { rate, bitPerfect ->
+                if (bitPerfect) "Bit-perfect" else rate
+            }.collect { rate ->
+                com.example.domain.service.PlayerHolder.applyResampling(rate)
+            }
+        }
+        // Sync Dithering Trigger
+        viewModelScope.launch {
+            combine(ditheringEnabled, bitPerfectMode) { enabled, bitPerfect ->
+                enabled && !bitPerfect
+            }.collect { enabled ->
+                com.example.domain.service.PlayerHolder.applyDithering(enabled)
+            }
+        }
+        // Sync USB Buffer Size and rebuild AudioTrack
+        viewModelScope.launch {
+            usbBufferSize.collect { size ->
+                com.example.domain.service.PlayerHolder.applyBufferSize(application, size)
+            }
+        }
+        // Sync DSD Playback Mode
+        viewModelScope.launch {
+            dsdNativeMode.collect { mode ->
+                com.example.domain.service.PlayerHolder.dopModeActive = 
+                    mode.contains("DoP", ignoreCase = true) || mode.contains("Marker", ignoreCase = true)
+            }
+        }
+        // Sync Bit-perfect Active state on changes
+        viewModelScope.launch {
+            bitPerfectMode.collect { enabled ->
+                com.example.domain.service.PlayerHolder.bitPerfectActive = enabled
+                if (enabled) {
+                    resamplingRate.value = "Bit-perfect"
+                    ditheringEnabled.value = false
+                    equalizerEnabled.value = false
+                }
             }
         }
         // Restore persistable URI permissions on app restart
@@ -156,6 +197,13 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                 if (lastDacDetected && !isDetected) {
                     if (audioEngine.isPlaying.value) {
                         audioEngine.pause()
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                application,
+                                "DAC Terputus! Pemutaran dihentikan otomatis (DAC Exclusive Mode Aktif).",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 }
                 lastDacDetected = isDetected

@@ -5,11 +5,112 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.arima.pro.core.audio.DsdDataSource
 
 object PlayerHolder {
     var player: ExoPlayer? = null
     val equalizerEngine = EqualizerEngine()
     
+    // Audio Path Processors
+    val resamplingAudioProcessor = com.arima.pro.core.audio.ResamplingAudioProcessor()
+    val ditheringAudioProcessor = com.arima.pro.core.audio.DitheringAudioProcessor()
+    val gainNormalizationAudioProcessor = com.arima.pro.core.audio.GainNormalizationAudioProcessor()
+    
+    // Control States
+    var bitPerfectActive = false
+    var bufferMs = 200 // Default: Max Latency (Stable)
+    var dopModeActive = false
+
+    fun applyResampling(resamplingRateStr: String) {
+        if (bitPerfectActive) {
+            resamplingAudioProcessor.setTargetSampleRate(0)
+            return
+        }
+        val sampleRate = when (resamplingRateStr) {
+            "96 kHz" -> 96000
+            "192 kHz" -> 192000
+            "384 kHz" -> 384000
+            else -> 0 // Bit-perfect / no resampling
+        }
+        resamplingAudioProcessor.setTargetSampleRate(sampleRate)
+        android.util.Log.d("PlayerHolder", "Applied resampling rate: $resamplingRateStr ($sampleRate Hz)")
+    }
+
+    fun applyDithering(enabled: Boolean) {
+        val activeValue = enabled && !bitPerfectActive
+        ditheringAudioProcessor.setDitheringEnabled(activeValue)
+    }
+
+    fun setVolumeNormalization(enabled: Boolean, gainDb: Float) {
+        val activeValue = enabled && !bitPerfectActive
+        gainNormalizationAudioProcessor.setNormalizationEnabled(activeValue)
+        gainNormalizationAudioProcessor.setGainDb(gainDb)
+    }
+
+    fun applyBufferSize(context: Context, sizeStr: String) {
+        val newMs = when {
+            sizeStr.contains("Min Latency") || sizeStr.contains("Direct Direct") -> 2
+            sizeStr.contains("Low Latency") || sizeStr.contains("Max Dynamic") || sizeStr.contains("Max Latency") -> 10
+            sizeStr.contains("Normal") || sizeStr.contains("Safe (Medium)") -> 50
+            else -> 200 // Max Latency (Stable)
+        }
+        if (bufferMs != newMs) {
+            bufferMs = newMs
+            android.util.Log.d("PlayerHolder", "Changing buffer size to: $sizeStr ($bufferMs ms)")
+            recreatePlayer(context)
+        }
+    }
+
+    fun recreatePlayer(context: Context) {
+        val oldPlayer = player
+        if (oldPlayer != null) {
+            val position = oldPlayer.currentPosition
+            val isPlaying = oldPlayer.isPlaying
+            val currentMediaItem = oldPlayer.currentMediaItem
+            
+            oldPlayer.stop()
+            oldPlayer.release()
+            player = null
+            
+            val newPlayer = getOrCreatePlayer(context)
+            if (currentMediaItem != null) {
+                newPlayer.setMediaItem(currentMediaItem, position)
+                newPlayer.prepare()
+                if (isPlaying) {
+                    newPlayer.play()
+                }
+            }
+        }
+    }
+
+    fun getReplayGain(context: Context, path: String): Float {
+        try {
+            if (!path.startsWith("content://")) {
+                val file = java.io.File(path)
+                if (file.exists()) {
+                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                    val tag = audioFile.tag
+                    if (tag != null) {
+                        var gainStr = tag.getFirst("REPLAYGAIN_TRACK_GAIN")
+                        if (gainStr.isNullOrEmpty()) {
+                            gainStr = tag.getFirst("R128_TRACK_GAIN")
+                        }
+                        if (gainStr.isNullOrEmpty()) {
+                            gainStr = tag.getFirst("replaygain_track_gain")
+                        }
+                        if (!gainStr.isNullOrEmpty()) {
+                            val parsed = gainStr.replace("dB", "").trim().toFloatOrNull()
+                            if (parsed != null) return parsed
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerHolder", "Error reading metadata ReplayGain: ${e.message}")
+        }
+        return 0f
+    }
+
     fun getOrCreatePlayer(context: Context): ExoPlayer {
         val active = player
         if (active != null) return active
@@ -19,21 +120,62 @@ object PlayerHolder {
             .setUsage(C.USAGE_MEDIA)
             .build()
             
-        val newPlayer = ExoPlayer.Builder(context.applicationContext)
+        val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): androidx.media3.exoplayer.audio.AudioSink? {
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(resamplingAudioProcessor, ditheringAudioProcessor, gainNormalizationAudioProcessor))
+                    .setAudioTrackBufferSizeProvider(object : androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider {
+                        override fun getBufferSizeInBytes(
+                            minBufferSizeInBytes: Int,
+                            encoding: Int,
+                            outputMode: Int,
+                            pcmFrameSize: Int,
+                            sampleRate: Int,
+                            bitrate: Int,
+                            maxPlaybackSpeed: Double
+                        ): Int {
+                            val ms = bufferMs
+                            if (ms > 0) {
+                                val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
+                                val channels = 2
+                                val calculatedSize = (sampleRate * channels * bytesPerSample * ms) / 1000
+                                return calculatedSize.coerceAtLeast(minBufferSizeInBytes)
+                            }
+                            return minBufferSizeInBytes
+                        }
+                    })
+                    .build()
+            }
+        }
+            
+        // Use custom DataSource to enable DsdDataSource on-the-fly transcoding
+        val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+            DsdDataSource(context.applicationContext, useDoP = dopModeActive)
+        }
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context.applicationContext)
+            .setDataSourceFactory(customDataSourceFactory)
+
+        val newPlayer = ExoPlayer.Builder(context.applicationContext, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         
         player = newPlayer
         
-        // Listen to audio session ID changes to sync with Equalizer
         newPlayer.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                equalizerEngine.setAudioSessionId(audioSessionId)
+                if (!bitPerfectActive) {
+                    equalizerEngine.setAudioSessionId(audioSessionId)
+                }
             }
         })
         
-        if (newPlayer.audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+        if (newPlayer.audioSessionId != C.AUDIO_SESSION_ID_UNSET && !bitPerfectActive) {
             equalizerEngine.setAudioSessionId(newPlayer.audioSessionId)
         }
         

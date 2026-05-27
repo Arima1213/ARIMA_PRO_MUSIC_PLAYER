@@ -22,6 +22,11 @@ class AudioEngine(private val context: Context) {
     private var vuJob: Job? = null
     private val outputManager = com.arima.pro.core.audio.AudioOutputManager(context)
 
+    var dacExclusiveModeActive = true
+    val showDacMissingDialog = MutableStateFlow(false)
+    val volumeNormalizationEnabled = MutableStateFlow(true)
+    val gaplessPlaybackEnabled = MutableStateFlow(true)
+
     private val player: ExoPlayer get() = PlayerHolder.getOrCreatePlayer(context)
 
     private val playbackListener = object : Player.Listener {
@@ -38,7 +43,31 @@ class AudioEngine(private val context: Context) {
 
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED) {
-                skipToNext()
+                if (!gaplessPlaybackEnabled.value) {
+                    scope.launch {
+                        delay(1500) // Insert 1.5s silence gap
+                        skipToNext()
+                    }
+                } else {
+                    skipToNext()
+                }
+            }
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (mediaItem != null) {
+                val mediaId = mediaItem.mediaId
+                val matchedSong = _playbackQueue.value.firstOrNull { it.id.toString() == mediaId }
+                if (matchedSong != null) {
+                    _currentSong.value = matchedSong
+                    
+                    // Sync Volume Normalization dynamically on transitions
+                    var trackGain = 0f
+                    if (volumeNormalizationEnabled.value && matchedSong.path.isNotEmpty()) {
+                        trackGain = PlayerHolder.getReplayGain(context, matchedSong.path)
+                    }
+                    PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
+                }
             }
         }
     }
@@ -108,6 +137,21 @@ class AudioEngine(private val context: Context) {
 
         scope.launch {
             try {
+                // Check for DAC Exclusive Mode blocking
+                if (dacExclusiveModeActive && !isDacConnected()) {
+                    showDacMissingDialog.value = true
+                    _isPlaying.value = false
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Hubungkan DAC untuk memutar (DAC Exclusive Mode Aktif)",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    return@launch
+                }
+                showDacMissingDialog.value = false
+
                 // Initialize player if null
                 val activePlayer = player
                 try {
@@ -149,8 +193,15 @@ class AudioEngine(private val context: Context) {
                     }
                 }
 
-                // Check for DAC routing
-                outputManager.routeToDac(activePlayer)
+                // Setup Volume Normalization on track loading
+                var trackGain = 0f
+                if (volumeNormalizationEnabled.value && song.path.isNotEmpty()) {
+                    // Fetch ReplayGain from track tags
+                    val rawGain = PlayerHolder.getReplayGain(context, song.path)
+                    // If tag present, calibrate from ReplayGain default (-18 LUFS) to EBU R128 target (-23 LUFS) by shifting -5 dB
+                    trackGain = if (rawGain != 0f) rawGain - 5.0f else -14.0f // Fallback to -14 dB (typical attenuation for EBU R128 match)
+                }
+                PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
 
                 try {
                     val serviceIntent = android.content.Intent(context, PlayerService::class.java)
@@ -159,13 +210,35 @@ class AudioEngine(private val context: Context) {
                     android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
                 }
 
-                val mediaItem = MediaItem.Builder()
-                    .setUri(fileUri)
-                    .setMediaId(song.id.toString())
-                    .build()
+                if (gaplessPlaybackEnabled.value) {
+                    // Populate multi-item playlist internally for native seamless transition
+                    val mediaItems = _playbackQueue.value.map { qSong ->
+                        val uri = if (qSong.path.startsWith("content://")) {
+                            Uri.parse(qSong.path)
+                        } else {
+                            Uri.fromFile(java.io.File(qSong.path))
+                        }
+                        MediaItem.Builder()
+                            .setUri(uri)
+                            .setMediaId(qSong.id.toString())
+                            .build()
+                    }
+                    val index = _playbackQueue.value.indexOfFirst { it.id == song.id }.coerceIn(0, mediaItems.size - 1)
+                    activePlayer.setMediaItems(mediaItems, index, 0L)
+                } else {
+                    // Single item mode
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(fileUri)
+                        .setMediaId(song.id.toString())
+                        .build()
+                    activePlayer.setMediaItem(mediaItem)
+                }
 
-                activePlayer.setMediaItem(mediaItem)
                 activePlayer.prepare()
+                
+                // Route to DAC (Must be done AFTER prepare() as requested)
+                outputManager.routeToDac(activePlayer)
+                
                 activePlayer.play()
 
             } catch (e: SecurityException) {
