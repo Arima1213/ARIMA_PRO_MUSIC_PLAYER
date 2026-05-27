@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -68,12 +69,24 @@ fun MainAppContent(viewModel: AudioViewModel) {
     val scanTracksFound by viewModel.scanTracksFound.collectAsState()
     val scanProgress by viewModel.scanProgress.collectAsState()
 
+    // Back button: one back press navigates to library tab instead of exiting app
     val navItems = listOf(
         Triple("library", "Library", Icons.Default.Home),
         Triple("dac", "DAC", Icons.Default.Info),
         Triple("settings", "Settings", Icons.Default.Settings),
         Triple("format_variants", "Codecs", Icons.Default.Star)
     )
+
+    // Back button: tap once → go to library. Tap again → exit app
+    var interceptedBackOnce by remember { mutableStateOf(false) }
+    BackHandler {
+        if (currentTab != "library") {
+            viewModel.selectTab("library")
+            interceptedBackOnce = true
+        } else if (!interceptedBackOnce) {
+            interceptedBackOnce = true
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
