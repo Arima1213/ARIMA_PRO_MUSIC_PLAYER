@@ -12,7 +12,8 @@ data class Song(
     val fileSize: String,
     val path: String,
     val folderPath: String,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val albumArt: ByteArray? = null
 ) {
     val durationText: String
         get() {

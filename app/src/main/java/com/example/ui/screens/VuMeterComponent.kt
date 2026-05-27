@@ -148,7 +148,7 @@ private fun VuChannelColumn(
                 fontSize = 14.sp,
                 color = Color.White
             )
-            val dbText = if (dbValue <= -60f) "-∞ dB" else "${String.format("%.1f", dbValue)} dB"
+            val dbText = if (dbValue <= -60f) "-∞ dB" else "${String.format(java.util.Locale.US, "%.1f", dbValue)} dB"
             Text(
                 text = dbText,
                 fontFamily = FontFamily.Monospace,

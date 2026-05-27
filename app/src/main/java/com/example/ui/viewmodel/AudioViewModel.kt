@@ -115,6 +115,20 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         seedInitialDataIfNeeded()
+        // Sync Equalizer with AudioEngine
+        viewModelScope.launch {
+            combine(equalizerEnabled, bandGains) { enabled, gains ->
+                Pair(enabled, gains)
+            }.collect { (enabled, gains) ->
+                audioEngine.applyEqualizer(enabled, gains)
+            }
+        }
+        // Sync DAC Exclusive Mode
+        viewModelScope.launch {
+            dacExclusiveMode.collect { enabled ->
+                dacController.enforceExclusiveMode(enabled)
+            }
+        }
         // Restore persistable URI permissions on app restart
         viewModelScope.launch {
             try {

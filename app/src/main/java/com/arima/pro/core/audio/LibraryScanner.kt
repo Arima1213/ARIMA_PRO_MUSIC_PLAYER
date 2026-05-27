@@ -70,6 +70,7 @@ class LibraryScanner(private val context: Context) {
                             var artist = ""
                             var album = ""
                             var durationVal = 0L
+                            var artBytes: ByteArray? = null
 
                             val retriever = MediaMetadataRetriever()
                             try {
@@ -78,6 +79,7 @@ class LibraryScanner(private val context: Context) {
                                 artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
                                 album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: ""
                                 durationVal = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                                artBytes = retriever.embeddedPicture
                             } catch (e: Exception) {
                                 // Ignored
                             } finally {
@@ -102,7 +104,8 @@ class LibraryScanner(private val context: Context) {
                                 fileSize = formattedSize,
                                 path = docFile.uri.toString(),
                                 folderPath = folderPath,
-                                isFavorite = false
+                                isFavorite = false,
+                                albumArt = artBytes
                             )
                         } catch (e: Exception) {
                             null
@@ -158,6 +161,7 @@ class LibraryScanner(private val context: Context) {
                             var artist = ""
                             var album = ""
 
+                            var artBytes: ByteArray? = null
                             try {
                                 val audioFile = AudioFileIO.read(file)
                                 val tag = audioFile.tag
@@ -165,9 +169,21 @@ class LibraryScanner(private val context: Context) {
                                     title = tag.getFirst(FieldKey.TITLE)
                                     artist = tag.getFirst(FieldKey.ARTIST)
                                     album = tag.getFirst(FieldKey.ALBUM)
+                                    artBytes = tag.firstArtwork?.binaryData
                                 }
                             } catch (e: Exception) {
                                 // Fallback
+                            }
+
+                            if (artBytes == null) {
+                                try {
+                                    val retriever = MediaMetadataRetriever()
+                                    retriever.setDataSource(file.absolutePath)
+                                    artBytes = retriever.embeddedPicture
+                                    retriever.release()
+                                } catch (e: Exception) {
+                                    // Ignored
+                                }
                             }
 
                             if (title.isEmpty()) title = file.nameWithoutExtension
@@ -188,6 +204,7 @@ class LibraryScanner(private val context: Context) {
                                 bitDepth = "${techInfo.bitDepth} bit",
                                 fileSize = formattedSize,
                                 path = file.absolutePath,
+                                albumArt = artBytes,
                                 folderPath = folderPath,
                                 isFavorite = false
                             )

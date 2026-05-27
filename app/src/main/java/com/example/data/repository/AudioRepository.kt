@@ -87,7 +87,8 @@ class AudioRepository(private val db: AppDatabase) {
         fileSize = fileSize,
         path = path,
         folderPath = folderPath,
-        isFavorite = isFavorite
+        isFavorite = isFavorite,
+        albumArt = albumArt
     )
 
     private fun Song.toEntity() = SongEntity(
@@ -102,7 +103,8 @@ class AudioRepository(private val db: AppDatabase) {
         fileSize = fileSize,
         path = path,
         folderPath = folderPath,
-        isFavorite = isFavorite
+        isFavorite = isFavorite,
+        albumArt = albumArt
     )
 
     private fun FolderEntity.toDomain() = Folder(

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -43,6 +44,8 @@ import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.documentfile.provider.DocumentFile
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -755,6 +758,23 @@ fun SongsListView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Custom Album Art Vector Placeholder (Spinning Vinyl)
+                    val albumArt = song.albumArt
+                    val bitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = albumArt) {
+                        if (albumArt != null) {
+                            withContext(Dispatchers.IO) {
+                                try {
+                                    android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
+                                        value = bmp.asImageBitmap()
+                                    }
+                                } catch (e: Exception) {
+                                    value = null
+                                }
+                            }
+                        } else {
+                            value = null
+                        }
+                    }
+                    val bitmap = bitmapState.value
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -762,7 +782,16 @@ fun SongsListView(
                             .background(BackgroundCard),
                         contentAlignment = Alignment.Center
                     ) {
-                        VinylArtVector(modifier = Modifier.fillMaxSize())
+                        if (bitmap != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = bitmap,
+                                contentDescription = "Album Art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            VinylArtVector(modifier = Modifier.fillMaxSize())
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
