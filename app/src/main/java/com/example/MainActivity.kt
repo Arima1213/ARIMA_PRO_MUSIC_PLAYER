@@ -69,6 +69,7 @@ fun MainAppContent(viewModel: AudioViewModel) {
     val activeSong by viewModel.audioEngine.currentSong.collectAsState()
 
     val showEqPanel by viewModel.showEqualizerPanel.collectAsState()
+    val eqBlocked by viewModel.eqBlockedByBitPerfect.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val showScanningProgress by viewModel.showScanningProgressDialog.collectAsState()
 
@@ -177,6 +178,44 @@ fun MainAppContent(viewModel: AudioViewModel) {
             EqualizerPanel(
                 viewModel = viewModel,
                 onDismiss = { viewModel.showEqualizerPanel.value = false }
+            )
+        }
+
+        if (eqBlocked) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissEqBlockedDialog() },
+                containerColor = BackgroundSurface,
+                title = {
+                    Text(
+                        text = "EQ Tidak Tersedia",
+                        style = HeadlineSmall.copy(color = AmberGold)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Equalizer aktif butuh system audio mixer.\n\n" +
+                            "Ini akan menonaktifkan BIT-PERFECT MODE.\n\n" +
+                            "Matikan BIT-PERFECT MODE di Settings untuk menggunakan EQ.",
+                        style = BodyMedium.copy(color = TextSecondary)
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
+                        onClick = {
+                            viewModel.bitPerfectMode.value = false
+                            viewModel.equalizerEnabled.value = true
+                            viewModel.dismissEqBlockedDialog()
+                        }
+                    ) {
+                        Text("Aktifkan EQ", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissEqBlockedDialog() }) {
+                        Text("Batal", color = TextSecondary)
+                    }
+                }
             )
         }
 

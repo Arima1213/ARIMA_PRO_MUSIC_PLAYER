@@ -86,6 +86,35 @@ class LibraryScanner(private val context: Context) {
                                 retriever.release()
                             }
 
+                            if (artBytes == null) {
+                                try {
+                                    context.contentResolver.openInputStream(docFile.uri)?.use { stream ->
+                                        val bytes = stream.readBytes()
+                                        val tempFile = java.io.File.createTempFile("art_extract", ".bin")
+                                        tempFile.outputStream().use { it.write(bytes) }
+                                        try {
+                                            val af = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
+                                            af.tag?.firstArtwork?.binaryData?.let { artBytes = it }
+                                        } catch (e: Exception) { /* jaudiotagger failed */ }
+                                        tempFile.delete()
+                                    }
+                                } catch (e: Exception) { /* stream failed */ }
+                            }
+
+                            if (artBytes != null && artBytes!!.size > 300_000) {
+                                try {
+                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size)
+                                    if (bmp != null) {
+                                        val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 256, 256, true)
+                                        val output = java.io.ByteArrayOutputStream()
+                                        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, output)
+                                        artBytes = output.toByteArray()
+                                        bmp.recycle()
+                                        scaled.recycle()
+                                    }
+                                } catch (e: Exception) { /* compression failed — keep original */ }
+                            }
+
                             if (title.isEmpty()) title = name.substringBeforeLast('.')
                             if (artist.isEmpty()) artist = "Unknown Artist"
                             if (album.isEmpty()) album = "Unknown Album"
@@ -184,6 +213,20 @@ class LibraryScanner(private val context: Context) {
                                 } catch (e: Exception) {
                                     // Ignored
                                 }
+                            }
+
+                            if (artBytes != null && artBytes!!.size > 300_000) {
+                                try {
+                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size)
+                                    if (bmp != null) {
+                                        val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 256, 256, true)
+                                        val output = java.io.ByteArrayOutputStream()
+                                        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, output)
+                                        artBytes = output.toByteArray()
+                                        bmp.recycle()
+                                        scaled.recycle()
+                                    }
+                                } catch (e: Exception) { /* ignore */ }
                             }
 
                             if (title.isEmpty()) title = file.nameWithoutExtension

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +31,8 @@ import com.example.ui.viewmodel.AudioViewModel
 @Composable
 fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
     val enabled by viewModel.equalizerEnabled.collectAsState()
+    val bitPerfectMode by viewModel.bitPerfectMode.collectAsState()
+    val eqBlocked by viewModel.eqBlockedByBitPerfect.collectAsState()
     val rawPreset by viewModel.currentPreset.collectAsState()
     val preamp by viewModel.preampGain.collectAsState()
     val bands by viewModel.bandGains.collectAsState()
@@ -60,21 +63,45 @@ fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
                 )
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "ACTIVE",
-                        style = LabelCaps.copy(color = if (enabled) FlacTeal else TextMuted)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(
-                        checked = enabled,
-                        onCheckedChange = { viewModel.toggleEqualizer(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.Black,
-                            checkedTrackColor = AmberGold,
-                            uncheckedThumbColor = TextMuted,
-                            uncheckedTrackColor = BackgroundPrimary
+                    if (bitPerfectMode) {
+                        // Show lock badge instead of switch
+                        Box(
+                            modifier = Modifier
+                                .background(VUPeak.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                                .border(1.dp, VUPeak, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    tint = VUPeak,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "LOCKED (Bit-Perfect Active)",
+                                    style = TechnicalSmall.copy(color = VUPeak, fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "ACTIVE",
+                            style = LabelCaps.copy(color = if (enabled) FlacTeal else TextMuted)
                         )
-                    )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = { viewModel.toggleEqualizer(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = AmberGold,
+                                uncheckedThumbColor = TextMuted,
+                                uncheckedTrackColor = BackgroundPrimary
+                            )
+                        )
+                    }
                 }
             }
 

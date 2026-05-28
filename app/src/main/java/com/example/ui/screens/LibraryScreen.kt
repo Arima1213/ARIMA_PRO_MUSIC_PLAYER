@@ -405,8 +405,9 @@ fun LibraryScreen(
                         onAlbumClick = { album ->
                             // Play all tracks in album
                             val albumSongs = songs.filter { it.album == album.title }
+                                .sortedBy { it.path }
                             if (albumSongs.isNotEmpty()) {
-                                viewModel.playSong(albumSongs.first())
+                                viewModel.playSong(albumSongs.first(), albumSongs)
                             }
                         }
                     )
@@ -414,8 +415,9 @@ fun LibraryScreen(
                         artists = artists,
                         onArtistClick = { artist ->
                             val artistSongs = songs.filter { it.artist == artist.name }
+                                .sortedWith(compareBy({ it.album }, { it.path }))
                             if (artistSongs.isNotEmpty()) {
-                                viewModel.playSong(artistSongs.first())
+                                viewModel.playSong(artistSongs.first(), artistSongs)
                             }
                         }
                     )
@@ -736,11 +738,14 @@ fun SongsListView(
                     // Custom Album Art Vector Placeholder (Spinning Vinyl)
                     val albumArt = song.albumArt
                     val bitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = albumArt) {
-                        if (albumArt != null) {
+                        if (albumArt != null && albumArt.isNotEmpty()) {
                             withContext(Dispatchers.IO) {
                                 try {
-                                    android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
+                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)
+                                    if (bmp != null && !bmp.isRecycled) {
                                         value = bmp.asImageBitmap()
+                                    } else {
+                                        value = null
                                     }
                                 } catch (e: Exception) {
                                     value = null

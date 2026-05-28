@@ -133,6 +133,13 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     val showScanningProgressDialog = MutableStateFlow(false)
     val showEqualizerPanel = MutableStateFlow(false)
 
+    private val _eqBlockedByBitPerfect = MutableStateFlow(false)
+    val eqBlockedByBitPerfect: StateFlow<Boolean> = _eqBlockedByBitPerfect.asStateFlow()
+
+    fun dismissEqBlockedDialog() {
+        _eqBlockedByBitPerfect.value = false
+    }
+
     private var scanJob: Job? = null
 
     init {
@@ -424,7 +431,11 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Song Interaction Controls ---
-    fun playSong(song: Song) {
+    fun playSong(song: Song, albumSongs: List<Song>? = null) {
+        if (albumSongs != null) {
+            val sortedAlbum = albumSongs.sortedBy { it.path }
+            audioEngine.setQueue(sortedAlbum)
+        }
         try {
             val context = getApplication<Application>()
             val intent = android.content.Intent(context, com.example.domain.service.PlayerService::class.java)
@@ -495,6 +506,10 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Equalizer Controls ---
     fun toggleEqualizer(enabled: Boolean) {
+        if (enabled && bitPerfectMode.value) {
+            _eqBlockedByBitPerfect.value = true
+            return
+        }
         equalizerEnabled.value = enabled
     }
 
