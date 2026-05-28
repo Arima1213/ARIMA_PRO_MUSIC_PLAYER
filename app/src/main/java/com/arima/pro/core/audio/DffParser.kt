@@ -49,7 +49,7 @@ class DffParser {
 
             val chunkStr = String(chunkId)
             if (chunkStr == "FVER") {
-                inputStream.skip(cSize)
+                skipFully(inputStream, cSize)
                 dataStartOffset += cSize
             } else if (chunkStr == "PROP") {
                 val propType = ByteArray(4)
@@ -72,22 +72,22 @@ class DffParser {
                         // skip padding if any
                         val skipAmount = pChunkSize - 4
                         if (skipAmount > 0) {
-                            inputStream.skip(skipAmount)
+                            skipFully(inputStream, skipAmount)
                             dataStartOffset += skipAmount
                             remainingPropSize -= skipAmount
                         }
                     } else if (String(pChunkId) == "CHNL") {
-                        channels = readUint16(inputStream)
+                        channels = readUint16(inputStream).coerceIn(1, 8)
                         dataStartOffset += 2
                         remainingPropSize -= 2
                         val skipAmount = pChunkSize - 2
                         if (skipAmount > 0) {
-                            inputStream.skip(skipAmount)
+                            skipFully(inputStream, skipAmount)
                             dataStartOffset += skipAmount
                             remainingPropSize -= skipAmount
                         }
                     } else {
-                        inputStream.skip(pChunkSize)
+                        skipFully(inputStream, pChunkSize)
                         dataStartOffset += pChunkSize
                         remainingPropSize -= pChunkSize
                     }
@@ -96,13 +96,13 @@ class DffParser {
                 dataSize = cSize
                 break // Stop when we reach data
             } else {
-                inputStream.skip(cSize)
+                skipFully(inputStream, cSize)
                 dataStartOffset += cSize
             }
 
             // DFF chunks are 2-byte aligned
             if (cSize % 2 != 0L) {
-                inputStream.skip(1)
+                skipFully(inputStream, 1)
                 dataStartOffset += 1
             }
         }
@@ -119,6 +119,20 @@ class DffParser {
         }
 
         return DffMetadata(sampleRate = fs, channels = channels, bitsPerSample = bitsPerSample, formatType = formatType)
+    }
+
+    private fun skipFully(inputStream: InputStream, amount: Long) {
+        var skipped = 0L
+        while (skipped < amount) {
+            val s = inputStream.skip(amount - skipped)
+            if (s <= 0) {
+                // Try reading one byte to see if we're really at EOF
+                if (inputStream.read() == -1) break
+                skipped += 1
+            } else {
+                skipped += s
+            }
+        }
     }
 
     private fun readUint64(inputStream: InputStream): Long {

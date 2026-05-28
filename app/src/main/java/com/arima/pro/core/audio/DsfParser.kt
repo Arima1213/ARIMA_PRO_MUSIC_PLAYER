@@ -32,7 +32,7 @@ class DsfParser {
                     if (magicFmt != "fmt ") return AudioFormat.UNKNOWN
                     
                     // Extract channels and rate
-                    channelCount = ByteBuffer.wrap(buffer, 24, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                    channelCount = ByteBuffer.wrap(buffer, 24, 4).order(ByteOrder.LITTLE_ENDIAN).int.coerceIn(1, 8)
                     sampleRate = ByteBuffer.wrap(buffer, 28, 4).order(ByteOrder.LITTLE_ENDIAN).int
                     
                     // Now read and skip chunks until we find "data" chunk

@@ -126,7 +126,7 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
             } catch (e: Exception) {
                 android.util.Log.e("DsdDataSource", "Error parsing DFF: ${e.message}")
             }
-        } else if (bytesRead >= 4 && magic.contentEquals("RIFF".toByteArray()) || magic.isNotEmpty()) {
+        } else if (bytesRead >= 4 && magic.contentEquals("RIFF".toByteArray()) || bytesRead > 0) {
             // Standard non-DSD format (WAV, FLAC, etc.) - delegate to DefaultDataSource
             val dds = androidx.media3.datasource.DefaultDataSource(context, true)
             delegateDataSource = dds

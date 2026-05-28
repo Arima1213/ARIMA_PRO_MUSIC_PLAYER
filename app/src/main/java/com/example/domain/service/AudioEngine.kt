@@ -63,17 +63,21 @@ class AudioEngine(private val context: Context) {
                     _currentSong.value = matchedSong
                     
                     // Sync Volume Normalization dynamically on transitions
-                    var trackGain = 0f
-                    if (volumeNormalizationEnabled.value && matchedSong.path.isNotEmpty()) {
-                        trackGain = PlayerHolder.getReplayGain(context, matchedSong.path)
+                    scope.launch {
+                        var trackGain = 0f
+                        if (volumeNormalizationEnabled.value && matchedSong.path.isNotEmpty()) {
+                            trackGain = withContext(Dispatchers.IO) {
+                                PlayerHolder.getReplayGain(context, matchedSong.path)
+                            }
+                        }
+                        PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
                     }
-                    PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
                 }
             }
         }
     }
 
-    private var visualizer: android.media.audio.PsychoVisualizer? = null
+    private var visualizer: com.arima.pro.core.audio.PsychoVisualizer? = null
 
     init {
         try {
@@ -212,7 +216,9 @@ class AudioEngine(private val context: Context) {
                 var trackGain = 0f
                 if (volumeNormalizationEnabled.value && song.path.isNotEmpty()) {
                     // Fetch ReplayGain from track tags
-                    val rawGain = PlayerHolder.getReplayGain(context, song.path)
+                    val rawGain = withContext(Dispatchers.IO) {
+                        PlayerHolder.getReplayGain(context, song.path)
+                    }
                     // If tag present, calibrate from ReplayGain default (-18 LUFS) to EBU R128 target (-23 LUFS) by shifting -5 dB
                     trackGain = if (rawGain != 0f) rawGain - 5.0f else -14.0f // Fallback to -14 dB (typical attenuation for EBU R128 match)
                 }
@@ -353,11 +359,7 @@ class AudioEngine(private val context: Context) {
     private fun startPlayerService() {
         try {
             val serviceIntent = android.content.Intent(context, PlayerService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
+            context.startService(serviceIntent)
         } catch (e: Exception) {
             android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
         }
@@ -477,7 +479,7 @@ class AudioEngine(private val context: Context) {
                     android.util.Log.w("AudioEngine", "Visualizer unavailable (permission denied), using AudioProcessor VU")
                     visualizer = null
                 } else {
-                    val vis = android.media.audio.PsychoVisualizer(audioSessionId)
+                    val vis = com.arima.pro.core.audio.PsychoVisualizer(audioSessionId)
                     val captureSizeRange = android.media.audiofx.Visualizer.getCaptureSizeRange()
                     if (captureSizeRange != null && captureSizeRange.size >= 2) {
                         vis.captureSize = captureSizeRange[1] // Use max capture size

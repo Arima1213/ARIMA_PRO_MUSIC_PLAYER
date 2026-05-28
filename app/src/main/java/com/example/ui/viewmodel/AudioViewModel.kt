@@ -428,11 +428,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val context = getApplication<Application>()
             val intent = android.content.Intent(context, com.example.domain.service.PlayerService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startService(intent)
         } catch (e: Exception) {
             android.util.Log.e("AudioViewModel", "Failed to start service: ${e.message}")
         }

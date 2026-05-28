@@ -1,4 +1,4 @@
-package android.media.audio
+package com.arima.pro.core.audio
 
 import android.media.audiofx.Visualizer
 
