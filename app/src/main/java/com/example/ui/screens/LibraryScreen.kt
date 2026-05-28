@@ -47,6 +47,8 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import com.example.ui.components.AppHeader
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -88,38 +90,22 @@ fun LibraryScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // 1. Custom Top Bar (Logo + Settings Gear only)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Spacer(modifier = Modifier.size(48.dp))
-
-                Text(
-                    text = "ARIMA PRO",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    ),
-                    color = AmberGold
-                )
-
-                IconButton(
-                    onClick = { viewModel.selectTab("settings") },
-                    modifier = Modifier.testTag("settings_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = TextPrimary
-                    )
+            // 1. Unified App Header (Title: Library)
+            AppHeader(
+                title = "Library",
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.selectTab("settings") },
+                        modifier = Modifier.testTag("settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = TextPrimary
+                        )
+                    }
                 }
-            }
+            )
 
             // 2. Now Playing Tap Area (Active Song Header HUD, Height: 56dp)
             if (activeSong != null) {
@@ -128,7 +114,7 @@ fun LibraryScreen(
                 val progressFraction = if (totalDuration > 0) position.toFloat() / totalDuration.toFloat() else 0f
 
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
                     shape = RoundedCornerShape(0.dp),
                     modifier = Modifier
                         .fillMaxWidth()

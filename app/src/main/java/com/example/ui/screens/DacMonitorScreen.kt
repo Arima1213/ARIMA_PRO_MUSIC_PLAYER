@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
+import com.example.ui.components.AppHeader
 
 @Composable
 fun DacMonitorScreen(viewModel: AudioViewModel) {
@@ -49,41 +50,25 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundPrimary)
-            .statusBarsPadding()
             .padding(bottom = 80.dp) // space for bottom tab bar
     ) {
-        // Top App Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = { viewModel.selectTab("library") }) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = TextPrimary
-                )
+        // Unified App Header
+        AppHeader(
+            title = "DAC Monitor",
+            actions = {
+                IconButton(onClick = { isRefreshing = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = AmberGold
+                    )
+                }
             }
-            Text(
-                text = "DAC MONITOR",
-                style = TechnicalLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
-                color = TextSecondary
-            )
-            IconButton(onClick = { isRefreshing = true }) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                    tint = AmberGold
-                )
-            }
-        }
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = ScreenHorizontalPadding, vertical = 8.dp)
         ) {
             // Active DAC Connected Card
             item {

@@ -4,6 +4,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+val ScreenHorizontalPadding = 20.dp
 
 // Forced Dark-Only Color Scheme for pure analog luxury vibe
 private val DarkColorScheme = darkColorScheme(

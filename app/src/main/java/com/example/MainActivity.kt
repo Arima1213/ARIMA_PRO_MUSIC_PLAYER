@@ -145,7 +145,7 @@ fun MainAppContent(viewModel: AudioViewModel) {
                             selectedTextColor = AmberGold,
                             unselectedIconColor = TextSecondary,
                             unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold.copy(alpha = 0.12f)
+                            indicatorColor = AmberGold.copy(alpha = 0.25f)
                         ),
                         modifier = Modifier.testTag("nav_item_$tabId")
                     )

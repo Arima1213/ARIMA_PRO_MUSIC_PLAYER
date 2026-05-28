@@ -73,12 +73,23 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    private var visualizer: android.media.audio.PsychoVisualizer? = null
+
     init {
         try {
             player.removeListener(playbackListener)
             player.addListener(playbackListener)
         } catch (e: Exception) {
             android.util.Log.e("AudioEngine", "Error adding playback listener in init: ${e.message}")
+        }
+
+        // Listen to the custom AudioProcessor real-time levels
+        PlayerHolder.audioLevelExtractor.onLevelsUpdated = { levels ->
+            // Fallback strategy: only use when PsychoVisualizer is not active
+            if (visualizer == null) {
+                _vuLevels.value = Pair(levels.leftDb, levels.rightDb)
+                _peakLevels.value = Pair(levels.peakL, levels.peakR)
+            }
         }
     }
 
@@ -204,12 +215,7 @@ class AudioEngine(private val context: Context) {
                 }
                 PlayerHolder.setVolumeNormalization(volumeNormalizationEnabled.value, trackGain)
 
-                try {
-                    val serviceIntent = android.content.Intent(context, PlayerService::class.java)
-                    context.startService(serviceIntent)
-                } catch (e: Exception) {
-                    android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
-                }
+                startPlayerService()
 
                 val createMediaItem = { qSong: Song ->
                     val uri = if (qSong.path.startsWith("content://")) {
@@ -345,11 +351,26 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    private fun startPlayerService() {
+        try {
+            val serviceIntent = android.content.Intent(context, PlayerService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Failed to start PlayerService: ${e.message}")
+        }
+    }
+
     fun play() {
         if (_currentSong.value == null && _playbackQueue.value.isNotEmpty()) {
             _currentSong.value = _playbackQueue.value.first()
         }
         val current = _currentSong.value ?: return
+
+        startPlayerService()
 
         try {
             val isPlaying = try { player.isPlaying } catch (e: Exception) { false }
@@ -436,61 +457,67 @@ class AudioEngine(private val context: Context) {
 
     private fun startVuLoop() {
         vuJob?.cancel()
-        vuJob = scope.launch(Dispatchers.Main) {
-            var leftPeak = -60.0f
-            var rightPeak = -60.0f
-            var leftPeakTimer = 0
-            var rightPeakTimer = 0
 
+        try {
+            visualizer?.release()
+            visualizer = null
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error releasing visualizer: ${e.message}")
+        }
+
+        val audioSessionId = try { player.audioSessionId } catch (e: Exception) { androidx.media3.common.C.AUDIO_SESSION_ID_UNSET }
+        if (audioSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET) {
+            try {
+                val vis = android.media.audio.PsychoVisualizer(audioSessionId)
+                val captureSizeRange = android.media.audiofx.Visualizer.getCaptureSizeRange()
+                if (captureSizeRange != null && captureSizeRange.size >= 2) {
+                    vis.captureSize = captureSizeRange[1] // Use max capture size
+                } else {
+                    vis.captureSize = 1024
+                }
+                vis.setDataCaptureListener(object : android.media.audiofx.Visualizer.OnDataCaptureListener {
+                    override fun onWaveFormDataCapture(v: android.media.audiofx.Visualizer?, waveform: ByteArray?, samplingRate: Int) {
+                        if (waveform != null && waveform.isNotEmpty()) {
+                            var sum = 0.0
+                            for (b in waveform) {
+                                val value = (b.toInt() and 0xFF) - 128
+                                sum += value * value
+                            }
+                            val rms = kotlin.math.sqrt(sum / waveform.size)
+                            val rawDb = if (rms > 0.0) 20 * kotlin.math.log10(rms / 128.0) else -60.0
+                            val leftDb = max(-60.0f, rawDb.toFloat())
+                            val rightDb = max(-60.0f, (rawDb * 0.95f).toFloat())
+
+                            // Dynamic Ballistics
+                            val currentL = _vuLevels.value.first
+                            val nextL = currentL + (leftDb - currentL) * (if (leftDb > currentL) 0.7f else 0.15f)
+                            val currentR = _vuLevels.value.second
+                            val nextR = currentR + (rightDb - currentR) * (if (rightDb > currentR) 0.7f else 0.15f)
+
+                            val peak = _peakLevels.value
+                            val peakL = max(peak.first - 0.5f, nextL)
+                            val peakR = max(peak.second - 0.5f, nextR)
+
+                            _vuLevels.value = Pair(nextL, nextR)
+                            _peakLevels.value = Pair(peakL, peakR)
+                        }
+                    }
+
+                    override fun onFftDataCapture(v: android.media.audiofx.Visualizer?, fft: ByteArray?, samplingRate: Int) {}
+                }, android.media.audiofx.Visualizer.getMaxCaptureRate() / 2, true, false)
+                vis.enabled = true
+                visualizer = vis
+            } catch (e: Exception) {
+                android.util.Log.e("AudioEngine", "Failed to start PsychoVisualizer: ${e.message}")
+            }
+        }
+
+        vuJob = scope.launch(Dispatchers.Main) {
             try {
                 while (isActive) {
                     val isPlaying = try { player.isPlaying } catch (e: Exception) { false }
                     if (!isPlaying) break
-
-                    delay(16) // ~60 FPS dynamic and fluent rendering loop
-
-                    // Dynamic, rhythmic base volume simulation resembling music peaks
-                    val baseL = Random.nextFloat() * 20f - 18f
-                    val baseR = Random.nextFloat() * 20f - 18f
-
-                    // LFO factor to simulate regular drums / bass pulses naturally
-                    val timeFactor = (System.currentTimeMillis() % 1000) / 1000f
-                    val dynamicSwing = kotlin.math.sin(timeFactor * Math.PI * 4).toFloat() * 10f
-
-                    val targetL = (baseL + dynamicSwing).coerceIn(-48.0f, -1.0f)
-                    val targetR = (baseR + dynamicSwing).coerceIn(-48.0f, -2.0f)
-
-                    val currentL = _vuLevels.value.first
-                    val currentR = _vuLevels.value.second
-
-                    // Realistic ballistics: instant rise (attack coefficient 0.7), smooth drop (release coefficient 0.15)
-                    val nextL = currentL + (targetL - currentL) * (if (targetL > currentL) 0.7f else 0.15f)
-                    val nextR = currentR + (targetR - currentR) * (if (targetR > currentR) 0.7f else 0.15f)
-
-                    if (nextL > leftPeak) {
-                        leftPeak = nextL
-                        leftPeakTimer = 60 // Hold peak for 1 second at 60 FPS
-                    } else {
-                        if (leftPeakTimer > 0) {
-                            leftPeakTimer--
-                        } else {
-                            leftPeak = max(-60.0f, leftPeak - 0.5f) // realistic slow peak fallback
-                        }
-                    }
-
-                    if (nextR > rightPeak) {
-                        rightPeak = nextR
-                        rightPeakTimer = 60
-                    } else {
-                        if (rightPeakTimer > 0) {
-                            rightPeakTimer--
-                        } else {
-                            rightPeak = max(-60.0f, rightPeak - 0.5f)
-                        }
-                    }
-
-                    _vuLevels.value = Pair(nextL, nextR)
-                    _peakLevels.value = Pair(leftPeak, rightPeak)
+                    delay(32)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AudioEngine", "Error in VU loop: ${e.message}")
@@ -500,6 +527,13 @@ class AudioEngine(private val context: Context) {
 
     private fun decayVuLevels() {
         vuJob?.cancel()
+        try {
+            visualizer?.release()
+            visualizer = null
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error releasing visualizer in decay: ${e.message}")
+        }
+
         vuJob = scope.launch(Dispatchers.Main) {
             while (isActive) {
                 val current = _vuLevels.value
@@ -520,6 +554,13 @@ class AudioEngine(private val context: Context) {
 
     fun release() {
         scope.cancel()
+        try {
+            visualizer?.release()
+            visualizer = null
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error releasing visualizer in release: ${e.message}")
+        }
+
         // If PlayerService is actively running (sharedPlayer is non-null) and playing, do NOT release the player
         val servicePlayer = PlayerService.sharedPlayer
         try {

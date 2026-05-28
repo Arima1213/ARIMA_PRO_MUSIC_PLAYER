@@ -14,6 +14,8 @@ object PlayerHolder {
     val resamplingAudioProcessor = ResamplingAudioProcessor()
     val ditheringAudioProcessor = DitheringAudioProcessor()
     val gainNormalizationAudioProcessor = GainNormalizationAudioProcessor()
+    val vuMeterAnalyzer = VuMeterAnalyzer()
+    val audioLevelExtractor = AudioLevelExtractor(vuMeterAnalyzer)
     
     // Control States
     var bitPerfectActive = false
@@ -144,7 +146,7 @@ object PlayerHolder {
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
                 return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
-                    .setAudioProcessors(arrayOf(resamplingAudioProcessor, ditheringAudioProcessor, gainNormalizationAudioProcessor))
+                    .setAudioProcessors(arrayOf(audioLevelExtractor, resamplingAudioProcessor, ditheringAudioProcessor, gainNormalizationAudioProcessor))
                     .setAudioTrackBufferSizeProvider(object : androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider {
                         override fun getBufferSizeInBytes(
                             minBufferSizeInBytes: Int,
@@ -171,7 +173,17 @@ object PlayerHolder {
             
         // Use custom DataSource to enable DsdDataSource on-the-fly transcoding
         val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
-            DsdDataSource(context.applicationContext, useDoP = dopModeActive)
+            val currentUri = player?.currentMediaItem?.localConfiguration?.uri
+            val uriStr = currentUri?.toString() ?: ""
+            if (uriStr.endsWith(".dsf", ignoreCase = true) || uriStr.endsWith(".dff", ignoreCase = true)) {
+                DsdDataSource(context.applicationContext, useDoP = dopModeActive)
+            } else if (uriStr.startsWith("content://", ignoreCase = true)) {
+                androidx.media3.datasource.ContentDataSource(context.applicationContext)
+            } else if (uriStr.startsWith("http://", ignoreCase = true) || uriStr.startsWith("https://", ignoreCase = true)) {
+                androidx.media3.datasource.DefaultHttpDataSource.Factory().createDataSource()
+            } else {
+                androidx.media3.datasource.DefaultDataSource(context.applicationContext, true)
+            }
         }
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context.applicationContext)
             .setDataSourceFactory(customDataSourceFactory)

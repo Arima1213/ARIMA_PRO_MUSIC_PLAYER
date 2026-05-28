@@ -14,6 +14,7 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
     private var inputStream: InputStream? = null
     private var uri: Uri? = null
     private var parser: DsfParser = DsfParser()
+    private var delegateDataSource: DataSource? = null
     
     // Playback state
     private var isPlayingDsd = false
@@ -40,8 +41,30 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
         isPlayingDsd = false
         val uriStr = dataSpec.uri.toString()
 
-        if (uriStr.endsWith(".dsf", ignoreCase = true) || uriStr.endsWith(".dff", ignoreCase = true)) {
-            if (parser.parse(context, dataSpec.uri)) {
+        // 1. If it's http/https, delegate directly to DefaultDataSource
+        if (uriStr.startsWith("http://", ignoreCase = true) || uriStr.startsWith("https://", ignoreCase = true)) {
+            val dds = androidx.media3.datasource.DefaultDataSource(context, true)
+            delegateDataSource = dds
+            return dds.open(dataSpec)
+        }
+
+        // 2. Read magic bytes for local files/content
+        var magic = ""
+        try {
+            context.contentResolver.openInputStream(dataSpec.uri)?.use { stream ->
+                val header = ByteArray(12)
+                val read = stream.read(header, 0, 12)
+                if (read >= 4) {
+                    magic = String(header, 0, 4)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DsdDataSource", "Error reading magic bytes: ${e.message}")
+        }
+
+        if (magic == "DSD " || magic == "FRM8") {
+            val format = parser.parse(context, dataSpec.uri)
+            if (format != AudioFormat.UNKNOWN) {
                 isPlayingDsd = true
                 dsdDataLeftBytes = parser.dataSize
                 currentPosition = 0L
@@ -67,25 +90,28 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                     return totalSimulatedBytes
                 }
             }
+        } else if (magic == "RIFF" || magic.isNotEmpty()) {
+            // Standard non-DSD format (WAV, FLAC, etc.) - delegate to DefaultDataSource
+            val dds = androidx.media3.datasource.DefaultDataSource(context, true)
+            delegateDataSource = dds
+            return dds.open(dataSpec)
         }
-        
-        // Standard non-DSD fallback
-        val stream = context.contentResolver.openInputStream(dataSpec.uri)
-            ?: throw java.io.IOException("Unable to open stream")
-        inputStream = stream
-        if (dataSpec.position > 0) {
-            stream.skip(dataSpec.position)
-        }
-        return dataSpec.length
+
+        // tidak ada magic recognized -> return C.RESULT_END_OF_INPUT (or mock open failure) dengan log error
+        android.util.Log.e("DsdDataSource", "No recognized magic: '$magic' for URI: $uriStr")
+        return C.RESULT_END_OF_INPUT.toLong()
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val dds = delegateDataSource
+        if (dds != null) {
+            return dds.read(buffer, offset, length)
+        }
+
         val stream = inputStream ?: return C.RESULT_END_OF_INPUT
         
         if (!isPlayingDsd) {
-            // General WAV / FLAC stream passthrough
-            val readBytes = stream.read(buffer, offset, length)
-            return if (readBytes == -1) C.RESULT_END_OF_INPUT else readBytes
+            return C.RESULT_END_OF_INPUT
         }
         
         // Read DSD blocks and transcode to PCM or DoP on-the-fly
@@ -197,6 +223,8 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
     override fun getUri(): Uri? = uri
 
     override fun close() {
+        delegateDataSource?.close()
+        delegateDataSource = null
         inputStream?.close()
         inputStream = null
         isPlayingDsd = false
