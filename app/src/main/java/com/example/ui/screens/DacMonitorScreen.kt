@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.media.AudioManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -45,6 +48,35 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
     val isDacDetected = dacState is com.arima.pro.core.audio.DacState.Detected
     val dacInfo = (dacState as? com.arima.pro.core.audio.DacState.Detected)?.dacInfo
+
+    val context = LocalContext.current
+    var deviceVolumeText by remember { mutableStateOf("100% System Vol") }
+
+    LaunchedEffect(isDacDetected, dacModeActive) {
+        while (true) {
+            try {
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val volumePercent = if (maxVolume > 0) (currentVolume * 100) / maxVolume else 0
+                
+                deviceVolumeText = if (isDacDetected) {
+                    if (dacModeActive) {
+                        "EXCLUSIVE MODE"
+                    } else {
+                        val linear = currentVolume.toFloat() / maxVolume.toFloat().coerceAtLeast(0.0001f)
+                        val dbFs = if (linear > 0f) 20 * kotlin.math.log10(linear) else -120f
+                        if (dbFs <= -120f) "-∞ dBFS" else String.format("%.1f dBFS", dbFs)
+                    }
+                } else {
+                    "$volumePercent% System Vol"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DacMonitor", "Error updating volume: ${e.message}")
+            }
+            kotlinx.coroutines.delay(500)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -247,7 +279,7 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                         "Mode" to if (isPlaying && activeSong != null) activeSong!!.format else "STANDBY",
                         "Sample Rate" to if (isPlaying && activeSong != null) "${activeSong!!.sampleRate} Real-time" else "0 Hz",
                         "Active Bit Depth" to if (isPlaying && activeSong != null) activeSong!!.bitDepth else "0 bit",
-                        "Device Volume" to if (isDacDetected) "-6.0 dBFS" else "100% System Vol"
+                        "Device Volume" to deviceVolumeText
                     ),
                     highlightValueColor = true
                 )

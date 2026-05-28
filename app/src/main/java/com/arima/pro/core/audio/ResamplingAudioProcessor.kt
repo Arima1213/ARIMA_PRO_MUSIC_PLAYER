@@ -9,6 +9,8 @@ import java.nio.ByteOrder
 class ResamplingAudioProcessor : BaseAudioProcessor() {
 
     private var targetSampleRate: Int = 0 // 0 means no resampling (Bit-perfect)
+    private var lastInputSampleRate = 0
+    private var lastInputChannelCount = 0
 
     fun setTargetSampleRate(sampleRate: Int) {
         if (targetSampleRate != sampleRate) {
@@ -18,7 +20,16 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        }
         val outputSampleRate = if (targetSampleRate > 0) targetSampleRate else inputAudioFormat.sampleRate
+        
+        if (lastInputSampleRate != inputAudioFormat.sampleRate || lastInputChannelCount != inputAudioFormat.channelCount) {
+            lastInputSampleRate = inputAudioFormat.sampleRate
+            lastInputChannelCount = inputAudioFormat.channelCount
+            flush()
+        }
         
         return AudioProcessor.AudioFormat(
             outputSampleRate,
@@ -36,6 +47,11 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
         val inputRate = inputAudioFormat.sampleRate
         val outputRate = outputAudioFormat.sampleRate
         val channels = inputAudioFormat.channelCount
+
+        if (channels <= 0) {
+            inputBuffer.position(limit)
+            return
+        }
 
         if (inputRate == outputRate) {
             // Pass-through
@@ -56,11 +72,20 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
         val outputSize = outputFramesCount * bytesPerFrame
         val buffer = replaceOutputBuffer(outputSize)
 
-        val inputShorts = ShortArray(inputFramesCount * channels)
+        val inputShortsSize = inputFramesCount * channels
+        val finalShortsSize = inputShortsSize - (inputShortsSize % channels)
+        if (finalShortsSize <= 0) {
+            inputBuffer.position(limit)
+            return
+        }
+
+        val inputShorts = ShortArray(finalShortsSize)
         val tempBuffer = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
         for (i in 0 until inputShorts.size) {
             if (tempBuffer.remaining() >= 2) {
                 inputShorts[i] = tempBuffer.getShort()
+            } else {
+                inputShorts[i] = 0
             }
         }
         inputBuffer.position(limit)
@@ -71,8 +96,8 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
             val fraction = (srcIndexDouble - srcIndexFloor).toFloat()
 
             for (ch in 0 until channels) {
-                val idx1 = srcIndexFloor * channels + ch
-                val idx2 = (srcIndexFloor + 1) * channels + ch
+                val idx1 = (srcIndexFloor * channels + ch).coerceIn(0, inputShorts.size - 1)
+                val idx2 = ((srcIndexFloor + 1) * channels + ch).coerceIn(0, inputShorts.size - 1)
 
                 val s1 = if (idx1 < inputShorts.size && idx1 >= 0) inputShorts[idx1] else 0
                 val s2 = if (idx2 < inputShorts.size && idx2 >= 0) inputShorts[idx2] else s1

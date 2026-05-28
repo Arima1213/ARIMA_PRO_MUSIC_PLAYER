@@ -106,6 +106,10 @@ class DacController(private val context: Context) {
         return isExclusiveMode && _dacState.value is DacState.NotDetected
     }
 
+    fun refreshDetection() {
+        updateDacDetection()
+    }
+
     fun updateDacDetection() {
         try {
             val connectedDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)

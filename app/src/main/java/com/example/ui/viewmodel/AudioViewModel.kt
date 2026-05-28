@@ -20,10 +20,16 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
     private val repository = AudioRepository(db)
-    val audioEngine = AudioEngine(application)
+    val audioEngine = com.example.domain.service.AudioEngine(application)
     private val scanner = com.arima.pro.core.audio.LibraryScanner(application)
     private val dacController = com.arima.pro.core.audio.DacController(application)
-    val dacState = dacController.detectDac()
+    
+    private val _dacState = MutableStateFlow<com.arima.pro.core.audio.DacState>(
+        com.arima.pro.core.audio.DacState.NotDetected
+    )
+    val dacState: StateFlow<com.arima.pro.core.audio.DacState> = _dacState.asStateFlow()
+
+    private var usbReceiver: android.content.BroadcastReceiver? = null
 
     // --- Tab Navigation States ---
     private val _currentTab = MutableStateFlow("library") // "library", "player", "dac", "settings", "format_variants"
@@ -115,6 +121,57 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         seedInitialDataIfNeeded()
+        
+        // Collect dacState updates from DacController into our _dacState MutableStateFlow
+        viewModelScope.launch {
+            dacController.detectDac().collect { state ->
+                _dacState.value = state
+            }
+        }
+
+        // Broadcaster for USB Attach/Detach with 500ms stabilization delay and auto output routing / playback pause
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+                when (intent.action) {
+                    android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            delay(500) // Tunggu device stabil
+                            dacController.refreshDetection()
+                            audioEngine.routeOutputToDac()
+                        }
+                    }
+                    android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _dacState.value = com.arima.pro.core.audio.DacState.NotDetected
+                            if (audioEngine.isPlaying.value) {
+                                audioEngine.pause()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        usbReceiver = receiver
+
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+
+        try {
+            androidx.core.content.ContextCompat.registerReceiver(
+                application,
+                receiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
+        } catch (e: Throwable) {
+            try {
+                application.registerReceiver(receiver, filter)
+            } catch (ex: Throwable) {
+                android.util.Log.e("AudioViewModel", "Failed to register usbReceiver: ${ex.message}")
+            }
+        }
         // Sync Equalizer with AudioEngine
         viewModelScope.launch {
             combine(equalizerEnabled, bandGains, bitPerfectMode) { enabled, gains, bitPerfect ->
@@ -453,6 +510,13 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         audioEngine.release()
         dacController.unregister()
+        usbReceiver?.let {
+            try {
+                getApplication<Application>().unregisterReceiver(it)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
     }
 }
 

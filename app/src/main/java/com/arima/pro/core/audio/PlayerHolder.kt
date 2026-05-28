@@ -195,6 +195,16 @@ object PlayerHolder {
             .build()
         
         player = newPlayer
+
+        // Route to DAC exactly once upon player initialization
+        // AUDIO SIGNAL PATH:
+        // Source File/Stream → ExoPlayer → AudioProcessors (resample/dither/normalize) → AudioSink → AudioTrack → DAC Device
+        try {
+            val outputManager = AudioOutputManager(context.applicationContext)
+            outputManager.routeToDac(newPlayer)
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerHolder", "Error automatic output routing on initialization: ${e.message}")
+        }
         
         newPlayer.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {

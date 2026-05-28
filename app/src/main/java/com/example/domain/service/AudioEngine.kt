@@ -254,10 +254,6 @@ class AudioEngine(private val context: Context) {
                 }
 
                 activePlayer.prepare()
-                
-                // Route to DAC (Must be done AFTER prepare() as requested)
-                outputManager.routeToDac(activePlayer)
-                
                 activePlayer.play()
 
             } catch (e: SecurityException) {
@@ -549,6 +545,14 @@ class AudioEngine(private val context: Context) {
                 _peakLevels.value = Pair(max(-60.0f, peak.first - 3.0f), max(-60.0f, peak.second - 3.0f))
                 delay(16)
             }
+        }
+    }
+
+    fun routeOutputToDac() {
+        try {
+            outputManager.routeToDac(player)
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Error routing to dac: ${e.message}")
         }
     }
 
