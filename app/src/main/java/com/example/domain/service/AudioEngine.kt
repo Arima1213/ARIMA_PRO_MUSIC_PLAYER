@@ -131,6 +131,9 @@ class AudioEngine(private val context: Context) {
     private val _peakLevels = MutableStateFlow(Pair(-60.0f, -60.0f))
     val peakLevels: StateFlow<Pair<Float, Float>> = _peakLevels.asStateFlow()
 
+    private val _dacRoutingStatus = MutableStateFlow<DacRoutingStatus>(DacRoutingStatus.Idle)
+    val dacRoutingStatus: StateFlow<DacRoutingStatus> = _dacRoutingStatus.asStateFlow()
+
     fun setQueue(songs: List<Song>) {
         _playbackQueue.value = songs
         if (_currentSong.value == null && songs.isNotEmpty()) {
@@ -464,47 +467,65 @@ class AudioEngine(private val context: Context) {
         val audioSessionId = try { player.audioSessionId } catch (e: Exception) { androidx.media3.common.C.AUDIO_SESSION_ID_UNSET }
         if (audioSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET) {
             try {
-                val vis = android.media.audio.PsychoVisualizer(audioSessionId)
-                val captureSizeRange = android.media.audiofx.Visualizer.getCaptureSizeRange()
-                if (captureSizeRange != null && captureSizeRange.size >= 2) {
-                    vis.captureSize = captureSizeRange[1] // Use max capture size
+                // Check for RECORD_AUDIO permission first
+                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (!hasPermission) {
+                    android.util.Log.w("AudioEngine", "Visualizer unavailable (permission denied), using AudioProcessor VU")
+                    visualizer = null
                 } else {
-                    vis.captureSize = 1024
-                }
-                vis.setDataCaptureListener(object : android.media.audiofx.Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(v: android.media.audiofx.Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-                        if (waveform != null && waveform.isNotEmpty()) {
-                            var sum = 0.0
-                            for (b in waveform) {
-                                val value = (b.toInt() and 0xFF) - 128
-                                sum += value * value
-                            }
-                            val rms = kotlin.math.sqrt(sum / waveform.size)
-                            val rawDb = if (rms > 0.0) 20 * kotlin.math.log10(rms / 128.0) else -60.0
-                            val leftDb = max(-60.0f, rawDb.toFloat())
-                            val rightDb = max(-60.0f, (rawDb * 0.95f).toFloat())
-
-                            // Dynamic Ballistics
-                            val currentL = _vuLevels.value.first
-                            val nextL = currentL + (leftDb - currentL) * (if (leftDb > currentL) 0.7f else 0.15f)
-                            val currentR = _vuLevels.value.second
-                            val nextR = currentR + (rightDb - currentR) * (if (rightDb > currentR) 0.7f else 0.15f)
-
-                            val peak = _peakLevels.value
-                            val peakL = max(peak.first - 0.5f, nextL)
-                            val peakR = max(peak.second - 0.5f, nextR)
-
-                            _vuLevels.value = Pair(nextL, nextR)
-                            _peakLevels.value = Pair(peakL, peakR)
-                        }
+                    val vis = android.media.audio.PsychoVisualizer(audioSessionId)
+                    val captureSizeRange = android.media.audiofx.Visualizer.getCaptureSizeRange()
+                    if (captureSizeRange != null && captureSizeRange.size >= 2) {
+                        vis.captureSize = captureSizeRange[1] // Use max capture size
+                    } else {
+                        vis.captureSize = 1024
                     }
+                    vis.setDataCaptureListener(object : android.media.audiofx.Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(v: android.media.audiofx.Visualizer?, waveform: ByteArray?, samplingRate: Int) {
+                            if (waveform != null && waveform.isNotEmpty()) {
+                                var sum = 0.0
+                                for (b in waveform) {
+                                    val value = (b.toInt() and 0xFF) - 128
+                                    sum += value * value
+                                }
+                                val rms = kotlin.math.sqrt(sum / waveform.size)
+                                val rawDb = if (rms > 0.0) 20 * kotlin.math.log10(rms / 128.0) else -60.0
+                                val leftDb = max(-60.0f, rawDb.toFloat())
+                                val rightDb = max(-60.0f, (rawDb * 0.95f).toFloat())
 
-                    override fun onFftDataCapture(v: android.media.audiofx.Visualizer?, fft: ByteArray?, samplingRate: Int) {}
-                }, android.media.audiofx.Visualizer.getMaxCaptureRate() / 2, true, false)
-                vis.enabled = true
-                visualizer = vis
+                                // Dynamic Ballistics
+                                val currentL = _vuLevels.value.first
+                                val nextL = currentL + (leftDb - currentL) * (if (leftDb > currentL) 0.7f else 0.15f)
+                                val currentR = _vuLevels.value.second
+                                val nextR = currentR + (rightDb - currentR) * (if (rightDb > currentR) 0.7f else 0.15f)
+
+                                val peak = _peakLevels.value
+                                val peakL = max(peak.first - 0.5f, nextL)
+                                val peakR = max(peak.second - 0.5f, nextR)
+
+                                _vuLevels.value = Pair(nextL, nextR)
+                                _peakLevels.value = Pair(peakL, peakR)
+                            }
+                        }
+
+                        override fun onFftDataCapture(v: android.media.audiofx.Visualizer?, fft: ByteArray?, samplingRate: Int) {}
+                    }, android.media.audiofx.Visualizer.getMaxCaptureRate() / 2, true, false)
+                    vis.enabled = true
+                    visualizer = vis
+                }
+            } catch (e: SecurityException) {
+                android.util.Log.w("AudioEngine", "Visualizer unavailable (permission denied), using AudioProcessor VU")
+                visualizer = null
+            } catch (e: IllegalArgumentException) {
+                android.util.Log.w("AudioEngine", "Visualizer not supported on this device, using AudioProcessor VU")
+                visualizer = null
             } catch (e: Exception) {
                 android.util.Log.e("AudioEngine", "Failed to start PsychoVisualizer: ${e.message}")
+                visualizer = null
             }
         }
 
@@ -549,10 +570,18 @@ class AudioEngine(private val context: Context) {
     }
 
     fun routeOutputToDac() {
-        try {
+        _dacRoutingStatus.value = DacRoutingStatus.Routing
+        val success = try {
             outputManager.routeToDac(player)
         } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "Error routing to dac: ${e.message}")
+            android.util.Log.e("AudioEngine", "routeOutputToDac exception: ${e.message}")
+            false
+        }
+        if (success) {
+            val dacName = outputManager.getConnectedDacDevice()?.productName?.toString() ?: "USB DAC"
+            _dacRoutingStatus.value = DacRoutingStatus.Success(dacName)
+        } else {
+            _dacRoutingStatus.value = DacRoutingStatus.Failed("Device busy or enumeration failed — audio routed to speaker")
         }
     }
 
@@ -591,4 +620,11 @@ class AudioEngine(private val context: Context) {
             PlayerHolder.player = null
         }
     }
+}
+
+sealed class DacRoutingStatus {
+    object Idle : DacRoutingStatus()
+    object Routing : DacRoutingStatus()
+    data class Success(val deviceName: String) : DacRoutingStatus()
+    data class Failed(val reason: String) : DacRoutingStatus()
 }

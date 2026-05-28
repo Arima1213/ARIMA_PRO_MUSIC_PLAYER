@@ -162,6 +162,14 @@ fun PermissionsScreen(
                             )
                         }
                     }
+
+                    item {
+                        PermissionExplanatoryRow(
+                            title = "Audio Capture (VU Meter)",
+                            description = "Required for real-time waveform capture on the VU Meters using the native Android Visualizer.",
+                            isGranted = isPermissionGranted(context, Manifest.permission.RECORD_AUDIO)
+                        )
+                    }
                 }
             }
 
@@ -397,6 +405,7 @@ fun getRequiredPermissionsList(): List<String> {
     } else {
         list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
+    list.add(Manifest.permission.RECORD_AUDIO)
     return list
 }
 

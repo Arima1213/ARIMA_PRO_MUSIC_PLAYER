@@ -39,9 +39,8 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
     var isRefreshing by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            kotlinx.coroutines.delay(1000)
+    LaunchedEffect(dacState) {
+        if (dacState !is com.arima.pro.core.audio.DacState.Scanning) {
             isRefreshing = false
         }
     }
@@ -88,7 +87,10 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
         AppHeader(
             title = "DAC Monitor",
             actions = {
-                IconButton(onClick = { isRefreshing = true }) {
+                IconButton(onClick = {
+                    isRefreshing = true
+                    viewModel.refreshDacDetection()
+                }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh",
@@ -102,6 +104,51 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = ScreenHorizontalPadding, vertical = 8.dp)
         ) {
+            // DAC Routing Failure Status Card Banner
+            item {
+                val dacRoutingStatus by viewModel.audioEngine.dacRoutingStatus.collectAsState()
+                if (dacRoutingStatus is com.example.domain.service.DacRoutingStatus.Failed) {
+                    val statusFailed = dacRoutingStatus as com.example.domain.service.DacRoutingStatus.Failed
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE57373).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFFE57373), RoundedCornerShape(8.dp))
+                            .padding(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Routing Error",
+                                tint = Color(0xFFE57373),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "DAC ROUTING GAGAL (AUDIO KE SPEAKER)",
+                                style = LabelCaps.copy(fontWeight = FontWeight.Bold, color = Color(0xFFE57373))
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = statusFailed.reason,
+                            style = BodyMedium,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.audioEngine.routeOutputToDac() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373)),
+                            modifier = Modifier.align(Alignment.End).testTag("action_retry_routing")
+                        ) {
+                            Text("Retry Routing", color = Color.White)
+                        }
+                    }
+                }
+            }
+
             // Active DAC Connected Card
             item {
                 Row(
@@ -119,7 +166,7 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
-                                if (isRefreshing) Color.Gray 
+                                if (isRefreshing || dacState is com.arima.pro.core.audio.DacState.Scanning) Color.Gray 
                                 else if (isDacDetected) VUSafe 
                                 else Color(0xFFE57373)
                             )
@@ -129,22 +176,24 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isRefreshing) "Scanning USB Devices..." 
-                                   else if (isDacDetected) dacInfo!!.name 
+                            text = if (isRefreshing || dacState is com.arima.pro.core.audio.DacState.Scanning) {
+                                       val msg = (dacState as? com.arima.pro.core.audio.DacState.Scanning)?.message ?: "Scanning USB Devices..."
+                                       msg
+                                   } else if (isDacDetected) dacInfo!!.name 
                                    else "SPEAKER (INTERNAL)",
                             style = HeadlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isRefreshing) TextSecondary else TextPrimary
+                            color = if (isRefreshing || dacState is com.arima.pro.core.audio.DacState.Scanning) TextSecondary else TextPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = if (isRefreshing) "Direct Hardware Querying..." 
+                            text = if (isRefreshing || dacState is com.arima.pro.core.audio.DacState.Scanning) "Direct Hardware Querying..." 
                                    else if (isDacDetected) "USB AUDIO • CLASS 2 • EXCLUSIVE" 
                                    else "SYSTEM AUDIO MIXER ROUTING",
                             style = TechnicalSmall.copy(letterSpacing = 1.sp)
                         )
                     }
 
-                    if (!isRefreshing) {
+                    if (!isRefreshing && dacState !is com.arima.pro.core.audio.DacState.Scanning) {
                         Icon(
                             imageVector = if (isDacDetected) Icons.Default.CheckCircle else Icons.Default.Warning,
                             contentDescription = "Active Status",
@@ -267,6 +316,12 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                     CapabilityCheckRow("DSD Direct Format Playback", dsdText, supportsDsd)
                     CapabilityCheckRow("Full hardware MQA Decoding", if (isDacDetected) "Supported" else "Not Supported", isDacDetected)
                     CapabilityCheckRow("DSD over PCM encapsulation (DoP)", dopText, supportsDop)
+                    
+                    val hasRecordAudio = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.RECORD_AUDIO
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    CapabilityCheckRow("Audio Capture (VU Meter) Permission", if (hasRecordAudio) "Granted" else "Required", hasRecordAudio)
                 }
                 Spacer(modifier = Modifier.height(20.dp))
             }

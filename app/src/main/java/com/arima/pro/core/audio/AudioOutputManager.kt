@@ -18,60 +18,66 @@ class AudioOutputManager(private val context: Context) {
      * This routing configuration is applied exactly once per player initialization/recreation
      * to prevent unpredictable multi-step routing issues.
      */
-    fun routeToDac(player: ExoPlayer?) {
-        if (player == null) return
+    fun routeToDac(player: ExoPlayer?): Boolean {
+        if (player == null) return false
         val maxRetries = 3
         var success = false
         var exception: Throwable? = null
         var chosenDeviceName = "Unknown"
+        val dacDevice = getConnectedDacDevice()
 
-        for (attempt in 1..maxRetries) {
-            try {
-                val dacDevice = getConnectedDacDevice()
-                if (dacDevice != null) {
-                    chosenDeviceName = dacDevice.productName?.toString() ?: "USB DAC"
+        if (dacDevice != null) {
+            chosenDeviceName = dacDevice.productName?.toString() ?: "USB DAC"
+            for (attempt in 1..maxRetries) {
+                try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         player.setPreferredAudioDevice(dacDevice)
                         android.util.Log.d("AudioOutputManager", "Successfully routed playback to connected DAC: $chosenDeviceName (Attempt $attempt)")
                     }
                     success = true
                     break
-                } else {
-                    val speakerDevice = getSpeakerDevice()
-                    if (speakerDevice != null) {
-                        chosenDeviceName = speakerDevice.productName?.toString() ?: "Speaker"
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            player.setPreferredAudioDevice(speakerDevice)
-                            android.util.Log.d("AudioOutputManager", "No DAC found. Routing to Speaker: $chosenDeviceName (Attempt $attempt)")
+                } catch (e: Throwable) {
+                    exception = e
+                    android.util.Log.e("AudioOutputManager", "Routing attempt $attempt failed for device $chosenDeviceName: ${e.message}")
+                    if (attempt < maxRetries) {
+                        try {
+                            Thread.sleep(100)
+                        } catch (ie: InterruptedException) {
+                            // ignore
                         }
-                        success = true
-                        break
-                    } else {
-                        chosenDeviceName = "System Default"
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            player.setPreferredAudioDevice(null)
-                            android.util.Log.d("AudioOutputManager", "No DAC or Speaker found. Resetting routing to system default (Attempt $attempt).")
-                        }
-                        success = true
-                        break
-                    }
-                }
-            } catch (e: Throwable) {
-                exception = e
-                android.util.Log.e("AudioOutputManager", "Routing attempt $attempt failed for device $chosenDeviceName: ${e.message}")
-                if (attempt < maxRetries) {
-                    try {
-                        Thread.sleep(100)
-                    } catch (ie: InterruptedException) {
-                        // ignore
                     }
                 }
             }
+        } else {
+            val speakerDevice = getSpeakerDevice()
+            if (speakerDevice != null) {
+                chosenDeviceName = speakerDevice.productName?.toString() ?: "Speaker"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        player.setPreferredAudioDevice(speakerDevice)
+                        android.util.Log.d("AudioOutputManager", "No DAC found. Routing to Speaker: $chosenDeviceName")
+                    } catch (e: Throwable) {
+                        android.util.Log.e("AudioOutputManager", "Routing to Speaker failed: ${e.message}")
+                    }
+                }
+            } else {
+                chosenDeviceName = "System Default"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        player.setPreferredAudioDevice(null)
+                        android.util.Log.d("AudioOutputManager", "No DAC or Speaker found. Resetting routing to system default.")
+                    } catch (e: Throwable) {
+                        android.util.Log.e("AudioOutputManager", "Resetting routing to default failed: ${e.message}")
+                    }
+                }
+            }
+            success = false
         }
 
-        if (!success) {
-            android.util.Log.e("AudioOutputManager", "FAILED to route playback to device $chosenDeviceName after $maxRetries attempts. Final Error: ${exception?.message}")
+        if (dacDevice != null && !success) {
+            android.util.Log.e("AudioOutputManager", "FAILED to route playback to DAC $chosenDeviceName after $maxRetries attempts. Final Error: ${exception?.message}")
         }
+        return success
     }
 
     fun verifyRouting(): Boolean {

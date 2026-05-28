@@ -171,19 +171,8 @@ object PlayerHolder {
             }
         }
             
-        // Use custom DataSource to enable DsdDataSource on-the-fly transcoding
         val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
-            val currentUri = player?.currentMediaItem?.localConfiguration?.uri
-            val uriStr = currentUri?.toString() ?: ""
-            if (uriStr.endsWith(".dsf", ignoreCase = true) || uriStr.endsWith(".dff", ignoreCase = true)) {
-                DsdDataSource(context.applicationContext, useDoP = dopModeActive)
-            } else if (uriStr.startsWith("content://", ignoreCase = true)) {
-                androidx.media3.datasource.ContentDataSource(context.applicationContext)
-            } else if (uriStr.startsWith("http://", ignoreCase = true) || uriStr.startsWith("https://", ignoreCase = true)) {
-                androidx.media3.datasource.DefaultHttpDataSource.Factory().createDataSource()
-            } else {
-                androidx.media3.datasource.DefaultDataSource(context.applicationContext, true)
-            }
+            DsdDataSource(context.applicationContext, useDoP = dopModeActive)
         }
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context.applicationContext)
             .setDataSourceFactory(customDataSourceFactory)

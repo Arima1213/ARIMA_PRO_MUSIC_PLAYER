@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
+import com.example.ui.components.DacHotplugDialog
 
 class MainActivity : ComponentActivity() {
 
@@ -188,6 +189,72 @@ fun MainAppContent(viewModel: AudioViewModel) {
                 progress = scanProgress,
                 onCancel = { viewModel.showScanningProgressDialog.value = false; viewModel.isScanning.value = false }
             )
+        }
+
+        val showDacMissingDialog by viewModel.audioEngine.showDacMissingDialog.collectAsState()
+        if (showDacMissingDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.audioEngine.showDacMissingDialog.value = false },
+                title = { Text("DAC Tidak Terdeteksi", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error) },
+                text = { Text("DAC Exclusive Mode aktif tetapi tidak ada USB DAC yang terhubung. Silakan hubungkan USB DAC untuk melanjutkan pemutaran.") },
+                confirmButton = {
+                    Button(onClick = { viewModel.audioEngine.showDacMissingDialog.value = false }) {
+                        Text("Tutup")
+                    }
+                }
+            )
+        }
+
+        // Display DAC hotplug notification dialog or toast alerts on event emissions
+        val dacHotplugEvent by viewModel.dacHotplugEvent.collectAsState()
+
+        // Observe DAC Routing STATUS Changes and alert the user
+        val dacRoutingStatus by viewModel.audioEngine.dacRoutingStatus.collectAsState()
+        LaunchedEffect(dacRoutingStatus) {
+            when (val status = dacRoutingStatus) {
+                is com.example.domain.service.DacRoutingStatus.Success -> {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Playback successfully routed to: ${status.deviceName}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                is com.example.domain.service.DacRoutingStatus.Failed -> {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Routing Error: ${status.reason}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                else -> {}
+            }
+        }
+
+        dacHotplugEvent?.let { event ->
+            if (event.type == com.example.ui.viewmodel.DacHotplugType.DETECTED && event.dacInfo != null) {
+                DacHotplugDialog(
+                    dacInfo = event.dacInfo,
+                    onDismiss = { viewModel.clearDacHotplugEvent() },
+                    onEnableExclusiveMode = {
+                        viewModel.dacExclusiveMode.value = true
+                        viewModel.audioEngine.routeOutputToDac()
+                        viewModel.clearDacHotplugEvent()
+                    },
+                    onPlayAnyway = {
+                        viewModel.dacExclusiveMode.value = false
+                        viewModel.clearDacHotplugEvent()
+                    }
+                )
+            } else if (event.type == com.example.ui.viewmodel.DacHotplugType.DISCONNECTED) {
+                LaunchedEffect(event.timestamp) {
+                    android.widget.Toast.makeText(
+                        context,
+                        "USB DAC Terputus: ${event.dacName ?: "Device"}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    viewModel.clearDacHotplugEvent()
+                }
+            }
         }
     }
 }

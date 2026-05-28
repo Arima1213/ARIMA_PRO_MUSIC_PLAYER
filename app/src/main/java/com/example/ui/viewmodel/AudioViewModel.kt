@@ -29,6 +29,22 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     )
     val dacState: StateFlow<com.arima.pro.core.audio.DacState> = _dacState.asStateFlow()
 
+    private val _dacHotplugEvent = MutableStateFlow<DacHotplugEvent?>(null)
+    val dacHotplugEvent: StateFlow<DacHotplugEvent?> = _dacHotplugEvent.asStateFlow()
+
+    fun clearDacHotplugEvent() {
+        _dacHotplugEvent.value = null
+    }
+
+    fun setDacHotplugEvent(event: DacHotplugEvent?) {
+        _dacHotplugEvent.value = event
+    }
+
+    fun refreshDacDetection() {
+        _dacState.value = com.arima.pro.core.audio.DacState.Scanning("Detecting USB device...")
+        dacController.refreshDetection()
+    }
+
     private var usbReceiver: android.content.BroadcastReceiver? = null
 
     // --- Tab Navigation States ---
@@ -122,10 +138,27 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     init {
         seedInitialDataIfNeeded()
         
-        // Collect dacState updates from DacController into our _dacState MutableStateFlow
+        // Collect dacState updates from DacController into our _dacState MutableStateFlow and emit hotplug events on transition
         viewModelScope.launch {
+            var lastState: com.arima.pro.core.audio.DacState = com.arima.pro.core.audio.DacState.NotDetected
             dacController.detectDac().collect { state ->
                 _dacState.value = state
+                if (state is com.arima.pro.core.audio.DacState.Detected && lastState !is com.arima.pro.core.audio.DacState.Detected) {
+                    val info = state.dacInfo
+                    audioEngine.showDacMissingDialog.value = false
+                    _dacHotplugEvent.value = DacHotplugEvent(
+                        type = DacHotplugType.DETECTED,
+                        dacName = info.name,
+                        dacInfo = info
+                    )
+                } else if (state is com.arima.pro.core.audio.DacState.NotDetected && lastState is com.arima.pro.core.audio.DacState.Detected) {
+                    _dacHotplugEvent.value = DacHotplugEvent(
+                        type = DacHotplugType.DISCONNECTED,
+                        dacName = (lastState as com.arima.pro.core.audio.DacState.Detected).dacInfo.name,
+                        dacInfo = null
+                    )
+                }
+                lastState = state
             }
         }
 
@@ -135,9 +168,9 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                 when (intent.action) {
                     android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _dacState.value = com.arima.pro.core.audio.DacState.Scanning("Detecting USB device...")
                             delay(500) // Tunggu device stabil
                             dacController.refreshDetection()
-                            audioEngine.routeOutputToDac()
                         }
                     }
                     android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -519,6 +552,16 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
+// Support definitions for DAC Hotplug
+data class DacHotplugEvent(
+    val type: DacHotplugType,
+    val dacName: String?,
+    val dacInfo: com.arima.pro.core.audio.DacInfo?,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+enum class DacHotplugType { DETECTED, DISCONNECTED }
 
 // Support definitions for Album/Artist transformations
 data class AlbumItem(

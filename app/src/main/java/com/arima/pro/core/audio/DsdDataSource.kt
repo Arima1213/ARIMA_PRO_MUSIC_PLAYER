@@ -13,13 +13,15 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
 
     private var inputStream: InputStream? = null
     private var uri: Uri? = null
-    private var parser: DsfParser = DsfParser()
+    private var dsfParser: DsfParser = DsfParser()
+    private var dffParser: DffParser = DffParser()
     private var delegateDataSource: DataSource? = null
     
     // Playback state
     private var isPlayingDsd = false
     private var currentPosition = 0L
     private var dsdDataLeftBytes = 0L
+    private var channelCount = 2
     
     // Buffer for block reads
     private var blockBufferL = ByteArray(4096)
@@ -49,24 +51,23 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
         }
 
         // 2. Read magic bytes for local files/content
-        var magic = ""
+        var magic = ByteArray(4)
+        var bytesRead = 0
         try {
             context.contentResolver.openInputStream(dataSpec.uri)?.use { stream ->
-                val header = ByteArray(12)
-                val read = stream.read(header, 0, 12)
-                if (read >= 4) {
-                    magic = String(header, 0, 4)
-                }
+                bytesRead = stream.read(magic, 0, 4)
             }
         } catch (e: Exception) {
             android.util.Log.e("DsdDataSource", "Error reading magic bytes: ${e.message}")
         }
 
-        if (magic == "DSD " || magic == "FRM8") {
-            val format = parser.parse(context, dataSpec.uri)
+        if (bytesRead >= 4 && magic.contentEquals("DSD ".toByteArray())) {
+            // DSF file
+            val format = dsfParser.parse(context, dataSpec.uri)
             if (format != AudioFormat.UNKNOWN) {
                 isPlayingDsd = true
-                dsdDataLeftBytes = parser.dataSize
+                dsdDataLeftBytes = dsfParser.dataSize
+                channelCount = dsfParser.channelCount
                 currentPosition = 0L
                 blockBufferIndex = 0
                 currentBlockSize = 0
@@ -77,20 +78,55 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                 // Open real stream and skip to data chunk start offset
                 val stream = context.contentResolver.openInputStream(dataSpec.uri)
                 if (stream != null) {
-                    stream.skip(parser.dataStartOffset)
+                    stream.skip(dsfParser.dataStartOffset)
                     inputStream = stream
                     
                     // Return simulated PCM layout: 176.4kHz, 2 channels, 16-bit (2 bytes) or 24-bit (3 bytes)
                     val sampleRate = 176400
                     val channels = 2
                     val bytesPerSample = if (useDoP) 3 else 2
-                    val totalDurationSec = parser.dataSize / (parser.sampleRate / 8 * parser.channelCount).toFloat()
+                    val totalDurationSec = dsfParser.dataSize / (dsfParser.sampleRate / 8 * dsfParser.channelCount).toFloat()
                     val totalSimulatedBytes = (sampleRate * channels * bytesPerSample * totalDurationSec).toLong()
                     
                     return totalSimulatedBytes
                 }
             }
-        } else if (magic == "RIFF" || magic.isNotEmpty()) {
+        } else if (bytesRead >= 4 && magic.contentEquals("FRM8".toByteArray())) {
+            // DFF file
+            try {
+                val stream = context.contentResolver.openInputStream(dataSpec.uri)
+                if (stream != null) {
+                    val metadata = dffParser.parse(stream)
+                    stream.close()
+                    
+                    isPlayingDsd = true
+                    dsdDataLeftBytes = dffParser.dataSize
+                    channelCount = dffParser.channelCount
+                    currentPosition = 0L
+                    blockBufferIndex = 0
+                    currentBlockSize = 0
+                    windowIndex = 0
+                    dopMarker = 0x05.toByte()
+                    movingAvgWindow.fill(0)
+                    
+                    val streamToPlay = context.contentResolver.openInputStream(dataSpec.uri)
+                    if (streamToPlay != null) {
+                        streamToPlay.skip(dffParser.dataStartOffset)
+                        inputStream = streamToPlay
+                        
+                        val sampleRate = 176400
+                        val channels = 2
+                        val bytesPerSample = if (useDoP) 3 else 2
+                        val totalDurationSec = dffParser.dataSize / (dffParser.sampleRate / 8 * dffParser.channelCount).toFloat()
+                        val totalSimulatedBytes = (sampleRate * channels * bytesPerSample * totalDurationSec).toLong()
+                        
+                        return totalSimulatedBytes
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DsdDataSource", "Error parsing DFF: ${e.message}")
+            }
+        } else if (bytesRead >= 4 && magic.contentEquals("RIFF".toByteArray()) || magic.isNotEmpty()) {
             // Standard non-DSD format (WAV, FLAC, etc.) - delegate to DefaultDataSource
             val dds = androidx.media3.datasource.DefaultDataSource(context, true)
             delegateDataSource = dds
@@ -98,8 +134,8 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
         }
 
         // tidak ada magic recognized -> return C.RESULT_END_OF_INPUT (or mock open failure) dengan log error
-        android.util.Log.e("DsdDataSource", "No recognized magic: '$magic' for URI: $uriStr")
-        return C.RESULT_END_OF_INPUT.toLong()
+        android.util.Log.e("DsdDataSource", "No recognized magic for URI: $uriStr")
+        throw java.io.IOException("Unsupported format: not a recognized DSD file")
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
@@ -124,7 +160,7 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                 // Read next block of DSD64 data
                 if (dsdDataLeftBytes <= 0) break
                 
-                val blockSizeToRead = parser.channelCount * 4096
+                val blockSizeToRead = channelCount * 4096
                 val rawBlock = ByteArray(blockSizeToRead)
                 var totalRead = 0
                 while (totalRead < blockSizeToRead) {
@@ -137,9 +173,9 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                 dsdDataLeftBytes -= totalRead
                 
                 // Separate Left and Right block
-                currentBlockSize = totalRead / parser.channelCount
+                currentBlockSize = totalRead / channelCount
                 System.arraycopy(rawBlock, 0, blockBufferL, 0, currentBlockSize)
-                if (parser.channelCount > 1) {
+                if (channelCount > 1) {
                     System.arraycopy(rawBlock, currentBlockSize, blockBufferR, 0, currentBlockSize)
                 } else {
                     System.arraycopy(rawBlock, 0, blockBufferR, 0, currentBlockSize)

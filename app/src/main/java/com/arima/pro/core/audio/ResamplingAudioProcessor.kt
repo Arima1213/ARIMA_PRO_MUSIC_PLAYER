@@ -23,13 +23,20 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
+        
         val outputSampleRate = if (targetSampleRate > 0) targetSampleRate else inputAudioFormat.sampleRate
         
-        if (lastInputSampleRate != inputAudioFormat.sampleRate || lastInputChannelCount != inputAudioFormat.channelCount) {
-            lastInputSampleRate = inputAudioFormat.sampleRate
-            lastInputChannelCount = inputAudioFormat.channelCount
-            flush()
+        // Passthrough if no resampling needed
+        if (outputSampleRate == inputAudioFormat.sampleRate) {
+            return AudioProcessor.AudioFormat(
+                inputAudioFormat.sampleRate,
+                inputAudioFormat.channelCount,
+                C.ENCODING_PCM_16BIT
+            )
         }
+        
+        lastInputSampleRate = inputAudioFormat.sampleRate
+        lastInputChannelCount = inputAudioFormat.channelCount
         
         return AudioProcessor.AudioFormat(
             outputSampleRate,
