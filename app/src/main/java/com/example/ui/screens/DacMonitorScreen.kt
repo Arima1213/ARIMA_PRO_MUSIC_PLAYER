@@ -337,12 +337,14 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
 
             // LIVE CURRENT OUTPUT TELEMETRY DETAILS
             item {
+                val currentSongFormat = activeSong?.format ?: "STANDBY"
+                val currentSongBitDepth = activeSong?.bitDepth ?: "0 bit"
                 DacTechnicalTableGroup(
                     title = "CURRENT TELEMETRY OUTPUT",
                     rows = listOf(
-                        "Mode" to if (isPlaying && activeSong != null) activeSong!!.format else "STANDBY",
+                        "Mode" to if (isPlaying && activeSong != null) currentSongFormat else "STANDBY",
                         "Sample Rate" to sampleRateDisplay,
-                        "Active Bit Depth" to if (isPlaying && activeSong != null) activeSong!!.bitDepth else "0 bit",
+                        "Active Bit Depth" to if (isPlaying && activeSong != null) currentSongBitDepth else "0 bit",
                         "Device Volume" to deviceVolumeText
                     ),
                     highlightValueColor = true

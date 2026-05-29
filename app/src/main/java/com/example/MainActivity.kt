@@ -115,9 +115,9 @@ fun MainAppContent(viewModel: AudioViewModel) {
         bottomBar = {
             if (currentTab != "player") {
                 Column {
-                    if (activeSong != null) {
+                    activeSong?.let { song ->
                         MiniPlayerPill(
-                            activeSong = activeSong!!,
+                            activeSong = song,
                             isPlaying = isPlaying,
                             viewModel = viewModel
                         )
