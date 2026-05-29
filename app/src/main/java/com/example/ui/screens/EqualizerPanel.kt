@@ -160,7 +160,7 @@ fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
                             val gainValue = bands.getOrElse(index) { 0.0f }
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(horizontal = 6.dp)
+                                modifier = Modifier.width(48.dp)
                             ) {
                                 Text(
                                     text = String.format(java.util.Locale.US, "%+d", gainValue.toInt()),
@@ -171,43 +171,50 @@ fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
                                 Box(
                                     modifier = Modifier
                                         .height(140.dp)
-                                        .width(6.dp)
-                                        .glassSurface(12.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                    contentAlignment = Alignment.BottomCenter
+                                        .width(48.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
+                                    // Track Background
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .fillMaxHeight(fraction = ((gainValue + 12f) / 24f).coerceIn(0f, 1f))
-                                            .background(if (enabled) AmberGold else TextSecondary)
+                                            .fillMaxHeight()
+                                            .width(8.dp)
+                                            .glassSurface(12.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        contentAlignment = Alignment.BottomCenter
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight(fraction = ((gainValue + 12f) / 24f).coerceIn(0f, 1f))
+                                                .background(if (enabled) AmberGold else TextSecondary)
+                                        )
+                                    }
+                                    
+                                    // Slider Overlay
+                                    Slider(
+                                        value = gainValue,
+                                        onValueChange = { viewModel.setBandGain(index, it) },
+                                        valueRange = -12f..12f,
+                                        enabled = enabled && !bitPerfectMode,
+                                        modifier = Modifier
+                                            .width(140.dp)
+                                            .height(48.dp)
+                                            .graphicsLayer {
+                                                rotationZ = -90f
+                                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+                                            }
+                                            .testTag("eq_band_slider_$freq"),
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color.Transparent,
+                                            activeTrackColor = Color.Transparent,
+                                            inactiveTrackColor = Color.Transparent,
+                                            disabledThumbColor = Color.Transparent,
+                                            disabledActiveTrackColor = Color.Transparent,
+                                            disabledInactiveTrackColor = Color.Transparent
+                                        )
                                     )
                                 }
-                                
-                                // Slider Overlay
-                                Slider(
-                                    value = gainValue,
-                                    onValueChange = { viewModel.setBandGain(index, it) },
-                                    valueRange = -12f..12f,
-                                    enabled = enabled && !bitPerfectMode,
-                                    modifier = Modifier
-                                        .width(140.dp)
-                                        .padding(horizontal = 0.dp)
-                                        .graphicsLayer {
-                                            rotationZ = -90f
-                                            translationX = -140f / 2 + 10f
-                                            translationY = -140f / 2 + 10f
-                                        }
-                                        .testTag("eq_band_slider_$freq"),
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color.Transparent,
-                                        activeTrackColor = Color.Transparent,
-                                        inactiveTrackColor = Color.Transparent,
-                                        disabledThumbColor = Color.Transparent,
-                                        disabledActiveTrackColor = Color.Transparent,
-                                        disabledInactiveTrackColor = Color.Transparent
-                                    )
-                                )
                                 
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(

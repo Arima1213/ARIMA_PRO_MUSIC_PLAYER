@@ -33,11 +33,6 @@ fun AppHeader(
             .fillMaxWidth()
             .graphicsLayer {
                 clip = true
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                        16f, 16f, android.graphics.Shader.TileMode.CLAMP
-                    ).asComposeRenderEffect()
-                }
             }
             .background(Color(0x0FFFFFFF)) // rgba(255,255,255,0.06)
             .drawBehind {

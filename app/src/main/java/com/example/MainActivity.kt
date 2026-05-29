@@ -113,48 +113,59 @@ fun MainAppContent(viewModel: AudioViewModel) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar(
-                containerColor = Color.Transparent,
-                contentColor = TextPrimary,
-                tonalElevation = 0.dp,
-                windowInsets = WindowInsets.navigationBars,
-                modifier = Modifier
-                    .background(BackgroundSurface) // Simulates glass blur bg
-                    .border(1.dp, BorderSubtle)
-            ) {
-                val items = listOf(
-                    Triple("library", "Library", Icons.Default.Home),
-                    Triple("dac", "DAC", Icons.Default.Info),
-                    Triple("settings", "Settings", Icons.Default.Settings),
-                    Triple("format_variants", "Codecs", Icons.Default.Star)
-                )
+            if (currentTab != "player") {
+                Column {
+                    if (activeSong != null) {
+                        MiniPlayerPill(
+                            activeSong = activeSong!!,
+                            isPlaying = isPlaying,
+                            viewModel = viewModel
+                        )
+                    }
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        contentColor = TextPrimary,
+                        tonalElevation = 0.dp,
+                        windowInsets = WindowInsets.navigationBars,
+                        modifier = Modifier
+                            .background(BackgroundSurface) // Simulates glass blur bg
+                            .border(1.dp, BorderSubtle)
+                    ) {
+                        val items = listOf(
+                            Triple("library", "Library", Icons.Default.Home),
+                            Triple("dac", "DAC", Icons.Default.Info),
+                            Triple("settings", "Settings", Icons.Default.Settings),
+                            Triple("format_variants", "Codecs", Icons.Default.Star)
+                        )
 
-                items.forEach { (tabId, label, icon) ->
-                    val isSelected = currentTab == tabId
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { viewModel.selectTab(tabId) },
-                        icon = {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label
+                        items.forEach { (tabId, label, icon) ->
+                            val isSelected = currentTab == tabId
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = { viewModel.selectTab(tabId) },
+                                icon = {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = AmberGold,
+                                    selectedTextColor = AmberGold,
+                                    unselectedIconColor = TextSecondary,
+                                    unselectedTextColor = TextSecondary,
+                                    indicatorColor = AmberGold.copy(alpha = 0.25f)
+                                ),
+                                modifier = Modifier.testTag("nav_item_$tabId")
                             )
-                        },
-                        label = {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AmberGold,
-                            selectedTextColor = AmberGold,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = AmberGold.copy(alpha = 0.25f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_$tabId")
-                    )
+                        }
+                    }
                 }
             }
         },

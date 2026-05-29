@@ -122,11 +122,6 @@ fun LibraryScreen(
                         .graphicsLayer {
                             clip = true
                             shape = RoundedCornerShape(12.dp)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                                    12f, 12f, android.graphics.Shader.TileMode.CLAMP
-                                ).asComposeRenderEffect()
-                            }
                         }
                         .background(Color(0x12FFFFFF)) // rgba(255,255,255,0.07) -> ~0x12
                         .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp)) // rgba(255,255,255,0.10) -> ~0x1A
@@ -233,11 +228,6 @@ fun LibraryScreen(
                     .graphicsLayer {
                         clip = true
                         shape = RoundedCornerShape(22.dp)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                                10f, 10f, android.graphics.Shader.TileMode.CLAMP
-                            ).asComposeRenderEffect()
-                        }
                     }
                     .background(Color(0x33000000)) // rgba(0,0,0,0.2)
             ) {
