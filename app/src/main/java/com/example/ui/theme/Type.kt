@@ -8,34 +8,34 @@ import androidx.compose.ui.unit.sp
 
 // Centralized high-end audiophile typographies
 val DisplayLarge = TextStyle(
-    fontFamily = FontFamily.Serif,
-    fontSize = 38.sp, // Adjusted slightly for safety on narrower mobile screens
+    fontFamily = FontFamily.SansSerif,
+    fontSize = 24.sp,
     fontWeight = FontWeight.Bold,
-    lineHeight = 44.sp,
+    lineHeight = 32.sp,
     color = TextPrimary
 )
 
 val DisplayMedium = TextStyle(
-    fontFamily = FontFamily.Serif,
-    fontSize = 28.sp,
+    fontFamily = FontFamily.SansSerif,
+    fontSize = 18.sp,
     fontWeight = FontWeight.SemiBold,
-    lineHeight = 36.sp,
+    lineHeight = 24.sp,
     color = TextPrimary
 )
 
 val HeadlineSmall = TextStyle(
-    fontFamily = FontFamily.Serif,
-    fontSize = 22.sp,
-    fontWeight = FontWeight.Medium,
-    lineHeight = 28.sp,
+    fontFamily = FontFamily.SansSerif,
+    fontSize = 18.sp,
+    fontWeight = FontWeight.SemiBold,
+    lineHeight = 24.sp,
     color = TextPrimary
 )
 
 val TechnicalLarge = TextStyle(
     fontFamily = FontFamily.Monospace,
-    fontSize = 16.sp,
+    fontSize = 14.sp,
     fontWeight = FontWeight.Medium,
-    lineHeight = 22.sp,
+    lineHeight = 20.sp,
     letterSpacing = 0.05.sp,
     color = TextPrimary
 )
@@ -51,7 +51,7 @@ val TechnicalSmall = TextStyle(
 val BodyLarge = TextStyle(
     fontFamily = FontFamily.SansSerif,
     fontSize = 16.sp,
-    fontWeight = FontWeight.Normal,
+    fontWeight = FontWeight.Medium,
     lineHeight = 24.sp,
     color = TextPrimary
 )
@@ -65,12 +65,14 @@ val BodyMedium = TextStyle(
 )
 
 val LabelCaps = TextStyle(
-    fontFamily = FontFamily.Monospace,
+    fontFamily = FontFamily.SansSerif, // not mono
     fontSize = 10.sp,
     fontWeight = FontWeight.Bold,
     lineHeight = 12.sp,
+    letterSpacing = 1.sp,
     color = AmberGold
 )
+
 
 val Typography = Typography(
     displayLarge = DisplayLarge,

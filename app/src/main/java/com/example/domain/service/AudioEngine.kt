@@ -146,6 +146,19 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    private val _actualOutputSampleRate = MutableStateFlow(0)
+    val actualOutputSampleRate: StateFlow<Int> = _actualOutputSampleRate.asStateFlow()
+
+    private fun updateOutputFormat() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val sampleRate = audioManager.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 0
+            _actualOutputSampleRate.value = sampleRate
+        } catch (e: Exception) {
+            _actualOutputSampleRate.value = 0
+        }
+    }
+
     fun playSong(song: Song) {
         val queue = _playbackQueue.value
         if (!queue.any { it.id == song.id }) {
@@ -264,6 +277,7 @@ class AudioEngine(private val context: Context) {
 
                 activePlayer.prepare()
                 activePlayer.play()
+                updateOutputFormat()
 
             } catch (e: SecurityException) {
                 e.printStackTrace()

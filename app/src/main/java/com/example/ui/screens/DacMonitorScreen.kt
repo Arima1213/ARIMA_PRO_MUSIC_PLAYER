@@ -36,6 +36,15 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
     val dacModeActive by viewModel.dacExclusiveMode.collectAsState()
     val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
     val activeSong by viewModel.audioEngine.currentSong.collectAsState()
+    val actualSampleRate by viewModel.audioEngine.actualOutputSampleRate.collectAsState()
+
+    val sampleRateDisplay = when {
+        !isPlaying || actualSampleRate == 0 -> "— Hz"
+        else -> {
+            val khz = actualSampleRate / 1000f
+            if (khz == khz.toInt().toFloat()) "${khz.toInt()} kHz" else String.format("%.1f kHz", khz)
+        }
+    }
 
     var isRefreshing by remember { mutableStateOf(false) }
 
@@ -332,7 +341,7 @@ fun DacMonitorScreen(viewModel: AudioViewModel) {
                     title = "CURRENT TELEMETRY OUTPUT",
                     rows = listOf(
                         "Mode" to if (isPlaying && activeSong != null) activeSong!!.format else "STANDBY",
-                        "Sample Rate" to if (isPlaying && activeSong != null) "${activeSong!!.sampleRate} Real-time" else "0 Hz",
+                        "Sample Rate" to sampleRateDisplay,
                         "Active Bit Depth" to if (isPlaying && activeSong != null) activeSong!!.bitDepth else "0 bit",
                         "Device Volume" to deviceVolumeText
                     ),

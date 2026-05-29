@@ -20,54 +20,10 @@ class DacController(private val context: Context) {
     private val _dacState = MutableStateFlow<DacState>(DacState.NotDetected)
     private var isExclusiveMode = false
 
-    private val usbReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val action = intent.action
-            if (UsbManager.ACTION_USB_DEVICE_ATTACHED == action) {
-                updateDacDetectionWithPolling()
-            } else if (UsbManager.ACTION_USB_DEVICE_DETACHED == action) {
-                updateDacDetection()
-            }
-        }
-    }
-
     private var dacDatabase: List<DacDatabaseEntry> = emptyList()
 
     init {
         dacDatabase = loadDacDatabase()
-        val filter = IntentFilter().apply {
-            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
-            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        }
-        try {
-            // Try with RECEIVER_EXPORTED first
-            androidx.core.content.ContextCompat.registerReceiver(
-                context,
-                usbReceiver,
-                filter,
-                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
-            )
-            android.util.Log.d("DacController", "Registered usbReceiver successfully with RECEIVER_EXPORTED")
-        } catch (e1: Throwable) {
-            android.util.Log.e("DacController", "Failed to register usbReceiver with RECEIVER_EXPORTED: ${e1.message}. Trying RECEIVER_NOT_EXPORTED...")
-            try {
-                androidx.core.content.ContextCompat.registerReceiver(
-                    context,
-                    usbReceiver,
-                    filter,
-                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
-                )
-                android.util.Log.d("DacController", "Registered usbReceiver successfully with RECEIVER_NOT_EXPORTED")
-            } catch (e2: Throwable) {
-                android.util.Log.e("DacController", "Failed to register usbReceiver with RECEIVER_NOT_EXPORTED: ${e2.message}. Trying generic context.registerReceiver...")
-                try {
-                    context.registerReceiver(usbReceiver, filter)
-                    android.util.Log.d("DacController", "Registered usbReceiver successfully without flags")
-                } catch (e3: Throwable) {
-                    android.util.Log.e("DacController", "Fatal: Failed to register usbReceiver: ${e3.message}")
-                }
-            }
-        }
         updateDacDetection()
     }
 
@@ -229,14 +185,6 @@ class DacController(private val context: Context) {
         } catch (e: Throwable) {
             android.util.Log.e("DacController", "Error during performDacDetection: ${e.message}")
             return DacState.NotDetected
-        }
-    }
-
-    fun unregister() {
-        try {
-            context.unregisterReceiver(usbReceiver)
-        } catch (e: Exception) {
-            // Ignored
         }
     }
 }

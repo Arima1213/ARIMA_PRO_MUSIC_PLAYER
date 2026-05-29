@@ -133,6 +133,27 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     val showScanningProgressDialog = MutableStateFlow(false)
     val showEqualizerPanel = MutableStateFlow(false)
 
+    private val _selectedAlbum = MutableStateFlow<AlbumItem?>(null)
+    val selectedAlbum: StateFlow<AlbumItem?> = _selectedAlbum.asStateFlow()
+
+    private val _selectedArtist = MutableStateFlow<ArtistItem?>(null)
+    val selectedArtist: StateFlow<ArtistItem?> = _selectedArtist.asStateFlow()
+
+    fun selectAlbum(album: AlbumItem) {
+        _selectedAlbum.value = album
+        _currentTab.value = "album_detail"
+    }
+
+    fun selectArtist(artist: ArtistItem) {
+        _selectedArtist.value = artist
+        _currentTab.value = "artist_detail"
+    }
+
+    fun clearSelection() {
+        _selectedAlbum.value = null
+        _selectedArtist.value = null
+    }
+
     private val _eqBlockedByBitPerfect = MutableStateFlow(false)
     val eqBlockedByBitPerfect: StateFlow<Boolean> = _eqBlockedByBitPerfect.asStateFlow()
 
@@ -264,6 +285,16 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                     resamplingRate.value = "Bit-perfect"
                     ditheringEnabled.value = false
                     equalizerEnabled.value = false
+                } else {
+                    equalizerEnabled.value = false
+                    try {
+                        val sessionId = com.arima.pro.core.audio.PlayerHolder.player?.audioSessionId ?: 0
+                        if (sessionId != 0) {
+                            com.arima.pro.core.audio.PlayerHolder.equalizerEngine.setAudioSessionId(sessionId)
+                        }
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
                 }
             }
         }
@@ -553,7 +584,6 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         audioEngine.release()
-        dacController.unregister()
         usbReceiver?.let {
             try {
                 getApplication<Application>().unregisterReceiver(it)

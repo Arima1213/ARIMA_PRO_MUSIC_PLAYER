@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -113,10 +114,13 @@ fun MainAppContent(viewModel: AudioViewModel) {
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar(
-                containerColor = BackgroundSurface,
+                containerColor = Color.Transparent,
                 contentColor = TextPrimary,
                 tonalElevation = 0.dp,
-                windowInsets = WindowInsets.navigationBars
+                windowInsets = WindowInsets.navigationBars,
+                modifier = Modifier
+                    .background(BackgroundSurface) // Simulates glass blur bg
+                    .border(1.dp, BorderSubtle)
             ) {
                 val items = listOf(
                     Triple("library", "Library", Icons.Default.Home),
@@ -170,6 +174,30 @@ fun MainAppContent(viewModel: AudioViewModel) {
                 "dac" -> DacMonitorScreen(viewModel)
                 "settings" -> SettingsScreen(viewModel)
                 "format_variants" -> FormatBadgeVariantsScreen(viewModel)
+                "album_detail" -> {
+                    val album = viewModel.selectedAlbum.value
+                    val albumSongs = viewModel.allSongs.value.filter { it.album == album?.title }
+                    if (album != null) {
+                        com.example.ui.screens.AlbumDetailScreen(
+                            album = album,
+                            songs = albumSongs.sortedBy { it.path },
+                            viewModel = viewModel,
+                            onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
+                        )
+                    }
+                }
+                "artist_detail" -> {
+                    val artist = viewModel.selectedArtist.value
+                    val artistSongs = viewModel.allSongs.value.filter { it.artist == artist?.name }
+                    if (artist != null) {
+                        com.example.ui.screens.ArtistDetailScreen(
+                            artist = artist,
+                            songs = artistSongs.sortedWith(compareBy({ it.album }, { it.path })),
+                            viewModel = viewModel,
+                            onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
+                        )
+                    }
+                }
             }
         }
 
