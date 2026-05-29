@@ -55,8 +55,7 @@ fun CustomPauseIcon(color: Color, modifier: Modifier = Modifier) {
 fun CompactTechIndicator(label: String, value: String) {
     Row(
         modifier = Modifier
-            .background(BackgroundCard, RoundedCornerShape(4.dp))
-            .border(0.5.dp, BorderSubtle, RoundedCornerShape(4.dp))
+            .glassSurface(4.dp)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -187,281 +186,499 @@ fun PlayerScreen(viewModel: AudioViewModel) {
         val vuMeterHeight = if (isSmallWidth) 50.dp else if (isLargeWidth) 64.dp else 60.dp
         val controlTarget = if (isSmallWidth) 48.dp else if (isLargeWidth) 64.dp else 56.dp
 
-        Column(
+        LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
-            // 1. Sleek Navigation Header (fixed height 48dp)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconButton(onClick = { viewModel.selectTab("library") }) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = TextPrimary
-                    )
-                }
-                Text(
-                    text = "NOW PLAYING",
-                    style = TechnicalLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
-                    color = TextSecondary
-                )
-                IconButton(onClick = { viewModel.showEqualizerPanel.value = true }) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Equalizer",
-                        tint = AmberGold
-                    )
-                }
-            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(screenHeight) // Takes exactly one screen height for the main player
+                ) {
+                    // 1. Sleek Navigation Header (fixed height 48dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = { viewModel.selectTab("library") }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = TextPrimary
+                            )
+                        }
+                        Text(
+                            text = "NOW PLAYING",
+                            style = TechnicalLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
+                            color = TextSecondary
+                        )
+                        IconButton(onClick = { viewModel.showEqualizerPanel.value = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Equalizer",
+                                tint = AmberGold
+                            )
+                        }
+                    }
 
-            // Calculate precise flexible height for the Album Art to absolutely avoid any page overflow
-            val reservedFixedHeights = 48.dp + 56.dp + vuMeterHeight + 80.dp + 48.dp + 36.dp + 72.dp
-            val remainingHeightForDynamics = screenHeight - reservedFixedHeights
-            val calculatedArtHeight = remainingHeightForDynamics * 0.32f
-            val finalAlbumArtConstraintSize = minOf(albumArtSize, calculatedArtHeight.coerceAtLeast(100.dp))
+                    // Spacer for some breathing room
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. ALBUM ART (flexible height, scaled to fill available space, square, centered)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.32f)
-                    .heightIn(max = finalAlbumArtConstraintSize),
-                contentAlignment = Alignment.Center
-            ) {
-                val albumArt = currentSong?.albumArt
-                val bitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = albumArt) {
-                    if (albumArt != null) {
-                        withContext(Dispatchers.IO) {
-                            try {
-                                android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
-                                    value = bmp.asImageBitmap()
+                    // 2. ALBUM ART (flexible height, scaled to fill available space, square, centered)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val albumArt = currentSong?.albumArt
+                        val bitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = albumArt) {
+                            if (albumArt != null) {
+                                withContext(Dispatchers.IO) {
+                                    try {
+                                        android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
+                                            value = bmp.asImageBitmap()
+                                        }
+                                    } catch (e: Exception) {
+                                        value = null
+                                    }
                                 }
-                            } catch (e: Exception) {
+                            } else {
                                 value = null
                             }
                         }
-                    } else {
-                        value = null
-                    }
-                }
-                val bitmap = bitmapState.value
-                Box(
-                    modifier = Modifier
-                        .aspectRatio(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BackgroundSurface)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (bitmap != null) {
-                        androidx.compose.foundation.Image(
-                            bitmap = bitmap,
-                            contentDescription = "Album Art",
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
-                    } else {
-                        if (currentSong?.album?.contains("Acoustic") == true || currentSong?.album?.contains("Quantum") == true) {
-                            RotatingReelsTape(isPlaying = isPlaying, rotationAngle = rotationAngle)
-                        } else {
-                            DynamicVinylDisc(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                        
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .fillMaxHeight(0.9f)
+                                .customShadow(
+                                    color = if (isPlaying) AmberGold.copy(alpha = 0.2f) else Color.Transparent,
+                                    radius = 20.dp,
+                                    blurRadius = 30.dp,
+                                    offsetY = 10.dp
+                                )
+                                .glassSurface(radius = 20.dp)
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val bitmap = bitmapState.value
+                            if (bitmap != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = bitmap,
+                                    contentDescription = "Album Art",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                if (currentSong?.album?.contains("Acoustic") == true || currentSong?.album?.contains("Quantum") == true) {
+                                    RotatingReelsTape(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                                } else {
+                                    DynamicVinylDisc(isPlaying = isPlaying, rotationAngle = rotationAngle)
+                                }
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 3. SONG INFO (compact, title Playfair/Serif style)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = currentSong?.title ?: "No Audio Playing",
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${currentSong?.artist ?: "Unknown Artist"} • ${currentSong?.album ?: "Unknown Album"}",
+                            style = BodyMedium.copy(fontSize = 12.sp),
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 4. VU METER
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(vuMeterHeight)
+                            .padding(horizontal = 24.dp)
+                            .glassSurface(12.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        VuMeterComponent(
+                            leftDb = vuLevels.first,
+                            rightDb = vuLevels.second,
+                            peakL = peakLevels.first,
+                            peakR = peakLevels.second,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 5. TECHNICAL INFO GRID
+                    ResponsiveTechInfo(
+                        song = currentSong,
+                        isSmall = isSmallWidth,
+                        isLarge = isLargeWidth
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 6. SEEK BAR
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .padding(horizontal = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val totalDuration = (currentSong?.duration ?: 1000L).coerceAtLeast(1L)
+
+                        Text(
+                            text = getFormattedTime(position),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+
+                        var dragPosition by remember { mutableStateOf<Float?>(null) }
+                        val currentFraction = if (totalDuration > 0f) {
+                            (position.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                        val sliderValue = dragPosition ?: currentFraction
+
+                        Slider(
+                            value = if (sliderValue.isNaN() || sliderValue.isInfinite()) 0f else sliderValue.coerceIn(0f, 1f),
+                            onValueChange = {
+                                dragPosition = if (it.isNaN() || it.isInfinite()) 0f else it.coerceIn(0f, 1f)
+                            },
+                            onValueChangeFinished = {
+                                val finalFraction = dragPosition ?: 0f
+                                viewModel.audioEngine.seekTo((finalFraction * totalDuration).toLong())
+                                dragPosition = null
+                            },
+                            colors = SliderDefaults.colors(
+                                thumbColor = AmberGold,
+                                activeTrackColor = AmberGold,
+                                inactiveTrackColor = Color(0x0FFFFFFF) // rgba(255,255,255,0.06)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("playback_seekbar")
+                        )
+
+                        Text(
+                            text = getFormattedTime(totalDuration),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    // 7. STATUS BAR & CONTROLS
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "DAC Icon",
+                                tint = Color(0x88FFFFFF),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = dacDeviceName,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        val formatCode = currentSong?.format ?: "FLAC"
+                        val depth = currentSong?.bitDepth ?: "24-bit"
+                        val sample = currentSong?.sampleRate ?: "96kHz"
+                        Text(
+                            text = "$formatCode $depth/$sample",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Repeat Mode
+                        var repeatState by remember { mutableStateOf(0) }
+                        IconButton(
+                            onClick = { repeatState = (repeatState + 1) % 3 },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Repeat",
+                                    tint = when (repeatState) {
+                                        1 -> TextPrimary
+                                        2 -> TextPrimary
+                                        else -> TextSecondary
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                if (repeatState == 2) {
+                                    Text(
+                                        text = "1",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BackgroundPrimary,
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .background(TextPrimary, CircleShape)
+                                            .padding(horizontal = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Prev
+                        IconButton(
+                            onClick = { viewModel.audioEngine.skipToPrevious() },
+                            modifier = Modifier.size(44.dp).testTag("prev_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Previous",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        // Play/Pause circular button (Glass style)
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .glassSurface(radius = 32.dp, borderColor = AmberGold)
+                                .clickable {
+                                    if (isPlaying) viewModel.audioEngine.pause() else viewModel.audioEngine.play()
+                                }
+                                .testTag("play_pause_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isPlaying) {
+                                CustomPauseIcon(color = AmberGold, modifier = Modifier.size(24.dp).padding(4.dp))
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play",
+                                    tint = AmberGold,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+
+                        // Next
+                        IconButton(
+                            onClick = { viewModel.audioEngine.skipToNext() },
+                            modifier = Modifier.size(44.dp).testTag("next_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = "Next",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        // Like (Favorite toggle)
+                        val isFavorite = currentSong?.isFavorite == true
+                        IconButton(
+                            onClick = { currentSong?.let { viewModel.toggleFavorite(it) } },
+                            modifier = Modifier.size(40.dp).testTag("fav_button")
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "Favorite",
+                                tint = if (isFavorite) AmberGold else TextSecondary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
 
-            // 3. SONG INFO (compact, title Playfair/Serif style)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
+            // 8. QUEUE AREA
+            val upcoming = queue.filter { it.id != currentSong?.id }
+            
+            item {
                 Text(
-                    text = currentSong?.title ?: "No Audio Playing",
-                    fontFamily = FontFamily.Serif,
-                    fontSize = songTitleSize,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${currentSong?.artist ?: "Unknown Artist"} • ${currentSong?.album ?: "Unknown Album"}",
-                    style = BodyMedium.copy(fontSize = 12.sp),
+                    text = "UP NEXT",
+                    style = TechnicalLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
                     color = TextSecondary,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                 )
             }
-
-            // 4. VU METER (compact height, horizontal orientation, 30 LED segments)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(vuMeterHeight)
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                VuMeterComponent(
-                    leftDb = vuLevels.first,
-                    rightDb = vuLevels.second,
-                    peakL = peakLevels.first,
-                    peakR = peakLevels.second,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // 5. TECHNICAL INFO GRID (compact responsive cells, 80dp total)
-            ResponsiveTechInfo(
-                song = currentSong,
-                isSmall = isSmallWidth,
-                isLarge = isLargeWidth
-            )
-
-            // 6. QUEUE AREA (scrollable LazyColumn, expands to remaining viewport space)
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1.0f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // Now Playing item highlighted in queue
-                currentSong?.let { song ->
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF1F1A14))
-                                .border(
-                                    width = 0.5.dp,
-                                    color = AmberMuted.copy(alpha = 0.3f),
-                                    shape = RoundedCornerShape(6.dp)
+            
+            // Now Playing item highlighted in queue
+            currentSong?.let { song ->
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .glassSurface(8.dp)
+                            .drawBehind {
+                                drawRect(
+                                    color = AmberGold,
+                                    topLeft = Offset(0f, 0f),
+                                    size = Size(4.dp.toPx(), size.height)
                                 )
-                                .drawBehind {
-                                    drawRect(
-                                        color = AmberGold,
-                                        topLeft = Offset(0f, 0f),
-                                        size = Size(4.dp.toPx(), size.height)
-                                    )
-                                }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "NOW PLAYING",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AmberGold,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "NOW PLAYING",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AmberGold,
-                                letterSpacing = 1.sp
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth().height(40.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(BackgroundPrimary),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(BackgroundCard),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    val itemArt = song.albumArt
-                                    val itemBitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = itemArt) {
-                                        if (itemArt != null) {
-                                            withContext(Dispatchers.IO) {
-                                                try {
-                                                    android.graphics.BitmapFactory.decodeByteArray(itemArt, 0, itemArt.size)?.let { bmp ->
-                                                        value = bmp.asImageBitmap()
-                                                    }
-                                                } catch (e: Exception) {
-                                                    value = null
+                                val itemArt = song.albumArt
+                                val itemBitmapState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = itemArt) {
+                                    if (itemArt != null) {
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                android.graphics.BitmapFactory.decodeByteArray(itemArt, 0, itemArt.size)?.let { bmp ->
+                                                    value = bmp.asImageBitmap()
                                                 }
+                                            } catch (e: Exception) {
+                                                value = null
                                             }
-                                        } else {
-                                            value = null
                                         }
-                                    }
-                                    val itemBitmap = itemBitmapState.value
-                                    if (itemBitmap != null) {
-                                        androidx.compose.foundation.Image(
-                                            bitmap = itemBitmap,
-                                            contentDescription = "Album Art",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
                                     } else {
-                                        VinylArtVector(modifier = Modifier.fillMaxSize())
+                                        value = null
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(AmberGold)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = song.title,
-                                            style = BodyLarge.copy(fontSize = 13.sp, color = TextPrimary),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
+                                val itemBitmap = itemBitmapState.value
+                                if (itemBitmap != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = itemBitmap,
+                                        contentDescription = "Album Art",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    VinylArtVector(modifier = Modifier.fillMaxSize())
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(AmberGold)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = song.artist,
-                                        style = BodyMedium.copy(fontSize = 11.sp, color = TextSecondary),
+                                        text = song.title,
+                                        style = BodyLarge.copy(fontSize = 14.sp, color = TextPrimary),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                Text(
+                                    text = song.artist,
+                                    style = BodyMedium.copy(fontSize = 12.sp, color = TextSecondary),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
+            }
 
-                // Other upcoming files/songs in the queue
-                val upcoming = queue.filter { it.id != currentSong?.id }
-                if (upcoming.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "No upcoming tracks in queue",
-                                style = BodyMedium.copy(fontSize = 12.sp, color = TextMuted)
-                            )
-                        }
+            if (upcoming.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No upcoming tracks in queue",
+                            style = BodyMedium.copy(fontSize = 12.sp, color = TextMuted)
+                        )
                     }
-                } else {
-                    itemsIndexed(upcoming) { _, song ->
+                }
+            } else {
+                itemsIndexed(upcoming) { _, song ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 4.dp)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .background(BackgroundCard, RoundedCornerShape(6.dp))
-                                .border(0.5.dp, BorderSubtle, RoundedCornerShape(6.dp))
+                                .glassSurface(8.dp, borderColor = Color(0x0AFFFFFF)) // rgba 0.04 -> 0x0A
                                 .clickable { viewModel.playSong(song) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val itemArt = song.albumArt
@@ -484,7 +701,7 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clip(RoundedCornerShape(3.dp))
+                                    .clip(RoundedCornerShape(4.dp))
                                     .background(BackgroundPrimary),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -516,246 +733,22 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                             }
                             IconButton(
                                 onClick = { viewModel.audioEngine.removeFromQueue(song) },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove",
                                     tint = TextMuted,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                     }
                 }
             }
-
-            // 7. SEEK BAR (fixed 48dp, interactive, time left | bar | time right)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val totalDuration = (currentSong?.duration ?: 1000L).coerceAtLeast(1L)
-
-                Text(
-                    text = getFormattedTime(position),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-
-                var dragPosition by remember { mutableStateOf<Float?>(null) }
-                val currentFraction = if (totalDuration > 0f) {
-                    (position.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
-                val sliderValue = dragPosition ?: currentFraction
-
-                Slider(
-                    value = if (sliderValue.isNaN() || sliderValue.isInfinite()) 0f else sliderValue.coerceIn(0f, 1f),
-                    onValueChange = {
-                        dragPosition = if (it.isNaN() || it.isInfinite()) 0f else it.coerceIn(0f, 1f)
-                    },
-                    onValueChangeFinished = {
-                        val finalFraction = dragPosition ?: 0f
-                        viewModel.audioEngine.seekTo((finalFraction * totalDuration).toLong())
-                        dragPosition = null
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = AmberGold,
-                        activeTrackColor = AmberGold,
-                        inactiveTrackColor = Color(0xFF2A2520)
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("playback_seekbar")
-                )
-
-                Text(
-                    text = getFormattedTime(totalDuration),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-            }
-
-            // 8. STATUS BAR (36dp, above controls)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp)
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "DAC Icon",
-                        tint = Color(0x88FFFFFF),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = dacDeviceName,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = TextSecondary
-                    )
-                }
-                val formatCode = currentSong?.format ?: "FLAC"
-                val depth = currentSong?.bitDepth ?: "24-bit"
-                val sample = currentSong?.sampleRate ?: "96kHz"
-                Text(
-                    text = "$formatCode $depth/$sample",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-            }
-
-            // 9. PLAYBACK CONTROLS (fixed 72dp, PINNED bottom)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Repeat Mode (0 = Off, 1 = All, 2 = One)
-                var repeatState by remember { mutableStateOf(0) }
-                IconButton(
-                    onClick = { repeatState = (repeatState + 1) % 3 },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Repeat",
-                            tint = when (repeatState) {
-                                1 -> AmberGold
-                                2 -> AmberGold
-                                else -> Color(0x33FFFFFF)
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
-                        if (repeatState == 2) {
-                            Text(
-                                text = "1",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black,
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .background(AmberGold, CircleShape)
-                                    .padding(horizontal = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Prev
-                IconButton(
-                    onClick = { viewModel.audioEngine.skipToPrevious() },
-                    modifier = Modifier.size(44.dp).testTag("prev_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Previous",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Play/Pause circular button
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .background(BackgroundSurface)
-                        .border(1.5.dp, AmberGold, CircleShape)
-                        .clickable {
-                            if (isPlaying) {
-                                viewModel.audioEngine.pause()
-                            } else {
-                                viewModel.audioEngine.play()
-                            }
-                        }
-                        .testTag("play_pause_button"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isPlaying) {
-                        CustomPauseIcon(color = AmberGold, modifier = Modifier.size(28.dp).padding(6.dp))
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play",
-                            tint = AmberGold,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-
-                // Next
-                IconButton(
-                    onClick = { viewModel.audioEngine.skipToNext() },
-                    modifier = Modifier.size(44.dp).testTag("next_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowForward,
-                        contentDescription = "Next",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Skip +30s
-                IconButton(
-                    onClick = {
-                        val currentPos = viewModel.audioEngine.currentPosition.value
-                        val totalDuration = currentSong?.duration ?: 1000L
-                        viewModel.audioEngine.seekTo((currentPos + 30000L).coerceAtMost(totalDuration))
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowForward,
-                            contentDescription = "Skip Forward 30s",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "+30",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AmberGold,
-                            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 2.dp)
-                        )
-                    }
-                }
-
-                // Like (Favorite toggle)
-                val isFavorite = currentSong?.isFavorite == true
-                IconButton(
-                    onClick = { currentSong?.let { viewModel.toggleFavorite(it) } },
-                    modifier = Modifier.size(40.dp).testTag("fav_button")
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) Color.Red else TextSecondary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+            
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
@@ -838,8 +831,7 @@ fun getFormattedTime(timeMs: Long): String {
 fun TechIndicator(label: String, value: String, highlightValue: Boolean = false) {
     Column(
         modifier = Modifier
-            .background(BackgroundCard, RoundedCornerShape(4.dp))
-            .border(0.5.dp, BorderSubtle, RoundedCornerShape(4.dp))
+            .glassSurface(6.dp)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

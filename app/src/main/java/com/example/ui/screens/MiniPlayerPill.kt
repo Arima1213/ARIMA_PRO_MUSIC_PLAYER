@@ -38,12 +38,13 @@ fun MiniPlayerPill(
 ) {
     Box(
         modifier = modifier
-            .padding(16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
             .fillMaxWidth()
             .height(64.dp)
             .glassCard(
                 shape = RoundedCornerShape(32.dp),
-                surfaceColor = BackgroundPrimary.copy(alpha = 0.85f)
+                surfaceColor = Color(0xFF1C1C24),
+                borderColor = BorderDefault
             )
             .clickable { viewModel.selectTab("player") }
     ) {

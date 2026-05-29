@@ -1,334 +1,297 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EqualizerPanel(viewModel: AudioViewModel, onDismiss: () -> Unit) {
     val enabled by viewModel.equalizerEnabled.collectAsState()
-    val bitPerfectMode by viewModel.bitPerfectMode.collectAsState()
-    val eqBlocked by viewModel.eqBlockedByBitPerfect.collectAsState()
     val rawPreset by viewModel.currentPreset.collectAsState()
     val preamp by viewModel.preampGain.collectAsState()
     val bands by viewModel.bandGains.collectAsState()
+    val bitPerfectMode by viewModel.bitPerfectMode.collectAsState()
 
-    val frequencies = listOf("32", "64", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
+    val frequencies = listOf("32Hz", "64Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz")
+    val presets = listOf("FLAT", "ROCK", "JAZZ", "CLASSICAL", "POP")
 
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = onDismiss,
-        containerColor = BackgroundSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = BorderDefault) }
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp)
+                .fillMaxSize()
+                .background(Color(0xB3000000)) // rgba(0,0,0,0.7) backdrop overlay
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Header Row
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+                radius = 24.dp
             ) {
-                Text(
-                    text = "HARDWARE EQUALIZER",
-                    style = HeadlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                )
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "EQUALIZER",
+                            style = HeadlineSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            color = AmberGold
+                        )
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                        }
+                    }
+                    
                     if (bitPerfectMode) {
-                        // Show lock badge instead of switch
                         Box(
                             modifier = Modifier
-                                .background(VUPeak.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-                                .border(1.dp, VUPeak, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                                .glassSurface(8.dp, borderColor = VUPeak.copy(alpha = 0.5f))
+                                .padding(12.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Locked",
-                                    tint = VUPeak,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(imageVector = Icons.Default.Lock, contentDescription = "Locked", tint = VUPeak, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "LOCKED (Bit-Perfect Active)",
+                                    text = "EQ locked during Bit-Perfect mode",
                                     style = TechnicalSmall.copy(color = VUPeak, fontWeight = FontWeight.Bold)
                                 )
                             }
                         }
-                    } else {
+                    }
+
+                    // Power Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "ACTIVE",
-                            style = LabelCaps.copy(color = if (enabled) FlacTeal else TextMuted)
+                            text = "ENABLE EQUALIZER",
+                            style = TechnicalSmall.copy(fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = enabled,
                             onCheckedChange = { viewModel.toggleEqualizer(it) },
+                            enabled = !bitPerfectMode,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
                                 checkedTrackColor = AmberGold,
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = BackgroundPrimary
+                                uncheckedThumbColor = TextSecondary,
+                                uncheckedTrackColor = Color(0x1AFFFFFF),
+                                uncheckedBorderColor = Color.Transparent
                             )
                         )
                     }
-                }
-            }
 
-            // Presets Selection row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("FLAT", "BASS BOOST", "VOCAL FOCUS", "TREBLE AIR").forEach { preset ->
-                    val isSelected = rawPreset == preset
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSelected) AmberGold else BackgroundCard)
-                            .border(1.dp, if (isSelected) AmberGold else BorderSubtle, RoundedCornerShape(4.dp))
-                            .clickable(enabled = enabled) { viewModel.selectPreset(preset) }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                    // Presets
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = preset,
-                            style = TechnicalSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.Black else if (enabled) TextPrimary else TextMuted
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // DYNAMIC CANVAS GRAPH REPRESENTING FITTING BANDS PATH LINES
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(BackgroundPrimary)
-                    .border(1.dp, BorderDefault, RoundedCornerShape(4.dp))
-                    .padding(8.dp)
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
-                    
-                    // Draw grid line bars representing dB positions
-                    val yZero = h / 2
-                    val stepY = h / 24 // scale mapping -12 to 12
-                    
-                    // Draw preamp zero line helper
-                    drawLine(
-                        color = BorderDefault,
-                        start = androidx.compose.ui.geometry.Offset(0f, yZero),
-                        end = androidx.compose.ui.geometry.Offset(w, yZero),
-                        strokeWidth = 1f
-                    )
-
-                    // Draw +6, -6 markings
-                    drawLine(
-                        color = BorderSubtle,
-                        start = androidx.compose.ui.geometry.Offset(0f, yZero - stepY * 6),
-                        end = androidx.compose.ui.geometry.Offset(w, yZero - stepY * 6),
-                        strokeWidth = 1f
-                    )
-                    drawLine(
-                        color = BorderSubtle,
-                        start = androidx.compose.ui.geometry.Offset(0f, yZero + stepY * 6),
-                        end = androidx.compose.ui.geometry.Offset(w, yZero + stepY * 6),
-                        strokeWidth = 1f
-                    )
-
-                    // Trace point lines representing individual gains
-                    val points = bands.mapIndexed { index, gain ->
-                        val ratioX = index.toFloat() / (bands.size - 1)
-                        val x = ratioX * w
-                        
-                        // Map gain (-12 to 12) to Y
-                        val y = (yZero - gain * stepY).coerceIn(0f, h)
-                        androidx.compose.ui.geometry.Offset(x, y)
-                    }
-
-                    // Paint clean connecting gold paths
-                    val path = Path()
-                    points.forEachIndexed { i, pt ->
-                        if (i == 0) {
-                            path.moveTo(pt.x, pt.y)
-                        } else {
-                            // cubic curves spline
-                            val prevPt = points[i - 1]
-                            path.cubicTo(
-                                prevPt.x + (pt.x - prevPt.x) / 2, prevPt.y,
-                                prevPt.x + (pt.x - prevPt.x) / 2, pt.y,
-                                pt.x, pt.y
-                            )
-                        }
-                    }
-
-                    drawPath(
-                        path = path,
-                        color = if (enabled) AmberGold else Color.Gray.copy(alpha = 0.5f),
-                        style = Stroke(width = 2.dp.toPx())
-                    )
-
-                    // Draw node circles
-                    points.forEach { pt ->
-                        drawCircle(
-                            color = if (enabled) AmberGlow else Color.Gray,
-                            radius = 4.dp.toPx(),
-                            center = pt
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Preamp Slider Controls
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("PREAMPLIFIER", style = LabelCaps.copy(color = TextSecondary))
-                    Text(
-                        text = String.format(java.util.Locale.US, "%+.1f dB", preamp),
-                        style = TechnicalSmall.copy(fontWeight = FontWeight.Bold, color = AmberGold)
-                    )
-                }
-                
-                Slider(
-                    value = preamp,
-                    onValueChange = { viewModel.setPreamp(it) },
-                    valueRange = -12.0f..12.0f,
-                    enabled = enabled,
-                    colors = SliderDefaults.colors(
-                        thumbColor = AmberGold,
-                        activeTrackColor = AmberGold,
-                        inactiveTrackColor = BorderDefault
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Horizontal Frequencies Sliders Row
-            Text(
-                text = "10 FREQUENCY CHANNEL EQUALIZERS (dB)",
-                style = LabelCaps.copy(color = TextSecondary, fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                itemsIndexed(frequencies) { index, freq ->
-                    val gainValue = bands.getOrElse(index) { 0.0f }
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(44.dp)
-                    ) {
-                        Text(
-                            text = String.format(java.util.Locale.US, "%+.1f", gainValue),
-                            style = TechnicalSmall.copy(fontSize = 10.sp, color = if (enabled) AmberGlow else TextMuted)
-                        )
-                        
-                        Box(
-                            modifier = Modifier
-                                .height(120.dp)
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Vertical slider emulation
-                            Slider(
-                                value = gainValue,
-                                onValueChange = { viewModel.setBandGain(index, it) },
-                                valueRange = -12.0f..12.0f,
-                                enabled = enabled,
+                        itemsIndexed(presets) { _, preset ->
+                            val isSelected = rawPreset.equals(preset, ignoreCase = true)
+                            Box(
                                 modifier = Modifier
-                                    .width(120.dp)
-                                    .align(Alignment.Center)
-                                    .testTag("eq_band_slider_$freq"),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = AmberGold,
-                                    activeTrackColor = AmberGold,
-                                    inactiveTrackColor = BorderDefault
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) AmberGold else Color.Transparent)
+                                    .border(1.dp, if (isSelected) AmberGold else Color(0x1AFFFFFF), CircleShape)
+                                    .clickable(enabled = enabled && !bitPerfectMode) { viewModel.selectPreset(preset) }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = preset,
+                                    style = TechnicalSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.Black else TextSecondary
+                                    )
                                 )
-                            )
+                            }
                         }
-                        
+                    }
+
+                    // 10-Band EQ
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        itemsIndexed(frequencies) { index, freq ->
+                            val gainValue = bands.getOrElse(index) { 0.0f }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 6.dp)
+                            ) {
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%+d", gainValue.toInt()),
+                                    style = TechnicalSmall.copy(fontSize = 9.sp, color = if (enabled) AmberGold else TextSecondary)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .height(140.dp)
+                                        .width(6.dp)
+                                        .glassSurface(12.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .fillMaxHeight(fraction = ((gainValue + 12f) / 24f).coerceIn(0f, 1f))
+                                            .background(if (enabled) AmberGold else TextSecondary)
+                                    )
+                                }
+                                
+                                // Slider Overlay
+                                Slider(
+                                    value = gainValue,
+                                    onValueChange = { viewModel.setBandGain(index, it) },
+                                    valueRange = -12f..12f,
+                                    enabled = enabled && !bitPerfectMode,
+                                    modifier = Modifier
+                                        .width(140.dp)
+                                        .padding(horizontal = 0.dp)
+                                        .graphicsLayer {
+                                            rotationZ = -90f
+                                            translationX = -140f / 2 + 10f
+                                            translationY = -140f / 2 + 10f
+                                        }
+                                        .testTag("eq_band_slider_$freq"),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Color.Transparent,
+                                        activeTrackColor = Color.Transparent,
+                                        inactiveTrackColor = Color.Transparent,
+                                        disabledThumbColor = Color.Transparent,
+                                        disabledActiveTrackColor = Color.Transparent,
+                                        disabledInactiveTrackColor = Color.Transparent
+                                    )
+                                )
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = freq,
+                                    style = TechnicalSmall.copy(fontSize = 10.sp, color = TextSecondary)
+                                )
+                            }
+                        }
+                    }
+
+                    // Preamp
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = freq,
-                            style = TechnicalSmall.copy(fontWeight = FontWeight.Bold, color = TextSecondary)
+                            text = "PREAMP",
+                            style = TechnicalSmall.copy(fontSize = 11.sp, color = TextSecondary),
+                            modifier = Modifier.width(60.dp)
+                        )
+                        Slider(
+                            value = preamp,
+                            onValueChange = { viewModel.setPreamp(it) },
+                            valueRange = -12f..12f,
+                            enabled = enabled && !bitPerfectMode,
+                            colors = SliderDefaults.colors(
+                                thumbColor = AmberGold,
+                                activeTrackColor = AmberGold,
+                                inactiveTrackColor = Color(0x1AFFFFFF),
+                                disabledThumbColor = TextMuted,
+                                disabledActiveTrackColor = TextMuted,
+                                disabledInactiveTrackColor = Color(0x0AFFFFFF)
+                            ),
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                        )
+                        Text(
+                            text = String.format(java.util.Locale.US, "%+d dB", preamp.toInt()),
+                            style = TechnicalSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (enabled) AmberGold else TextSecondary),
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(50.dp)
                         )
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                    // Toggles (Bass Boost & Virtualizer Placeholders for UI as requested)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Bass Boost", style = TechnicalSmall.copy(fontSize = 12.sp, color = TextPrimary))
+                            Switch(
+                                checked = false, onCheckedChange = { }, enabled = false,
+                                colors = SwitchDefaults.colors(uncheckedTrackColor = Color(0x1AFFFFFF), uncheckedThumbColor = TextSecondary)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Virtualizer", style = TechnicalSmall.copy(fontSize = 12.sp, color = TextPrimary))
+                            Switch(
+                                checked = false, onCheckedChange = { }, enabled = false,
+                                colors = SwitchDefaults.colors(uncheckedTrackColor = Color(0x1AFFFFFF), uncheckedThumbColor = TextSecondary)
+                            )
+                        }
+                    }
 
-            // Action Buttons (Reset All, Close)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Button(
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = BackgroundCard),
-                    onClick = { viewModel.resetEqualizer() },
-                    enabled = enabled
-                ) {
-                    Text("RESET ALL", color = if (enabled) TextPrimary else TextMuted, fontWeight = FontWeight.Bold)
-                }
-                
-                Button(
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
-                    onClick = onDismiss
-                ) {
-                    Text("APPLY FILTERS", color = Color.Black, fontWeight = FontWeight.Bold)
+                    // Footer Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { viewModel.resetEqualizer() }) {
+                            Text(text = "RESET", color = TextSecondary, style = TechnicalSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        }
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(text = "APPLY", color = Color.Black, style = TechnicalSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        }
+                    }
                 }
             }
         }
     }
 }
+

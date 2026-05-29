@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import com.example.ui.screens.CustomPauseIcon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +47,13 @@ import androidx.documentfile.provider.DocumentFile
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import android.os.Build
 
 import com.example.ui.components.AppHeader
 import com.example.ui.components.glassCard
@@ -91,73 +99,210 @@ fun LibraryScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // 1. Unified App Header (Title: Library)
+            // 1. TOP BAR
             AppHeader(
-                title = "Library",
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.selectTab("settings") },
-                        modifier = Modifier.testTag("settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = TextPrimary
-                        )
+                    IconButton(onClick = { viewModel.selectTab("settings") }, modifier = Modifier.testTag("settings_button")) {
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", tint = TextPrimary)
                     }
                 }
             )
 
-            // 3. Tab Select Chips (Asymmetric Selected-Expands [♪ Songs] [⊏] [👤] [📁])
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("Songs", "Albums", "Artists", "Folders").forEach { tab ->
-                    val isSelected = currentTab.equals(tab, ignoreCase = true)
-                    val icon = when (tab) {
-                        "Songs" -> Icons.Default.PlayArrow
-                        "Albums" -> Icons.Default.Star
-                        "Artists" -> Icons.Default.Person
-                        "Folders" -> Icons.Default.Home
-                        else -> Icons.Default.PlayArrow
-                    }
+            // 2. NOW PLAYING MINI BAR
+            activeSong?.let { song ->
+                val position by viewModel.audioEngine.currentPosition.collectAsState()
+                val duration = song.duration.coerceAtLeast(1L)
+                val progress = (position.toFloat() / duration).coerceIn(0f, 1f)
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(30.dp))
-                            .background(if (isSelected) AmberGold else BackgroundCard)
-                            .border(
-                                width = 1.dp,
-                                color = if (isSelected) AmberGold else BorderSubtle,
-                                shape = RoundedCornerShape(30.dp)
-                            )
-                            .clickable { viewModel.selectLibraryTab(tab.lowercase()) }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp)
+                        .height(64.dp)
+                        .graphicsLayer {
+                            clip = true
+                            shape = RoundedCornerShape(12.dp)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                    12f, 12f, android.graphics.Shader.TileMode.CLAMP
+                                ).asComposeRenderEffect()
+                            }
+                        }
+                        .background(Color(0x12FFFFFF)) // rgba(255,255,255,0.07) -> ~0x12
+                        .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp)) // rgba(255,255,255,0.10) -> ~0x1A
+                        .clickable { viewModel.selectTab("player") }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        // Left: Art
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.DarkGray)
                         ) {
                             Icon(
-                                imageVector = icon,
-                                contentDescription = tab,
-                                tint = if (isSelected) Color.Black else TextSecondary,
-                                modifier = Modifier.size(15.dp)
+                                imageVector = Icons.Default.MusicNote, 
+                                contentDescription = "Art", 
+                                tint = TextSecondary, 
+                                modifier = Modifier.align(Alignment.Center).size(24.dp)
                             )
-                            if (isSelected) {
+                        }
+                        
+                        if (isPlaying) {
+                            Spacer(modifier = Modifier.width(10.dp))
+                            // Pulse animation 3 dots
+                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                                val scale0 by infiniteTransition.animateFloat(
+                                    initialValue = 0.3f, targetValue = 1f,
+                                    animationSpec = infiniteRepeatable(animation = tween(400, delayMillis = 0), repeatMode = RepeatMode.Reverse),
+                                    label = "PulseBar0"
+                                )
+                                val scale1 by infiniteTransition.animateFloat(
+                                    initialValue = 0.3f, targetValue = 1f,
+                                    animationSpec = infiniteRepeatable(animation = tween(400, delayMillis = 100), repeatMode = RepeatMode.Reverse),
+                                    label = "PulseBar1"
+                                )
+                                val scale2 by infiniteTransition.animateFloat(
+                                    initialValue = 0.3f, targetValue = 1f,
+                                    animationSpec = infiniteRepeatable(animation = tween(400, delayMillis = 200), repeatMode = RepeatMode.Reverse),
+                                    label = "PulseBar2"
+                                )
+                                Box(modifier = Modifier.width(3.dp).height(12.dp * scale0).clip(RoundedCornerShape(1.5.dp)).background(AmberGold))
+                                Box(modifier = Modifier.width(3.dp).height(12.dp * scale1).clip(RoundedCornerShape(1.5.dp)).background(AmberGold))
+                                Box(modifier = Modifier.width(3.dp).height(12.dp * scale2).clip(RoundedCornerShape(1.5.dp)).background(AmberGold))
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        // Center
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = song.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(text = song.artist, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // Right: Play/Pause circle button
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, AmberGold, CircleShape)
+                                .clickable { if (isPlaying) viewModel.audioEngine.pause() else viewModel.audioEngine.play() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isPlaying) {
+                                CustomPauseIcon(color = AmberGold, modifier = Modifier.size(12.dp))
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = AmberGold,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Bottom progress line
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth(progress)
+                            .height(2.dp)
+                            .background(AmberGold)
+                    )
+                }
+            }
+
+            // 3. TAB ROW
+            val tabs = listOf("Songs", "Albums", "Artists", "Folders")
+            val tabIcons = listOf(Icons.Default.MusicNote, Icons.Default.Star, Icons.Default.Person, Icons.Default.Folder)
+            val selectedTabIndex = tabs.indexOfFirst { it.equals(currentTab, ignoreCase = true) }.coerceAtLeast(0)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .height(44.dp)
+                    .graphicsLayer {
+                        clip = true
+                        shape = RoundedCornerShape(22.dp)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                10f, 10f, android.graphics.Shader.TileMode.CLAMP
+                            ).asComposeRenderEffect()
+                        }
+                    }
+                    .background(Color(0x33000000)) // rgba(0,0,0,0.2)
+            ) {
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = Color.Transparent,
+                    divider = {},
+                    indicator = { tabPositions ->
+                        if (selectedTabIndex < tabPositions.size) {
+                            val currentTabPosition = tabPositions[selectedTabIndex]
+                            val animOffset by animateDpAsState(
+                                targetValue = currentTabPosition.left,
+                                animationSpec = tween(durationMillis = 250, easing = LinearOutSlowInEasing),
+                                label = "TabOffset"
+                            )
+                            val animWidth by animateDpAsState(
+                                targetValue = currentTabPosition.width,
+                                animationSpec = tween(durationMillis = 250, easing = LinearOutSlowInEasing),
+                                label = "TabWidth"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .wrapContentHeight(Alignment.Bottom)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = animOffset)
+                                        .width(animWidth)
+                                        .padding(horizontal = 16.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                                        .background(AmberGold)
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        val isSelected = index == selectedTabIndex
+                        Tab(
+                            selected = isSelected,
+                            onClick = { viewModel.selectLibraryTab(tab.lowercase()) },
+                            selectedContentColor = TextPrimary,
+                            unselectedContentColor = TextSecondary,
+                            modifier = Modifier
+                                .padding(vertical = 4.dp, horizontal = 4.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) Color(0x0FFFFFFF) else Color.Transparent)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = tabIcons[index],
+                                    contentDescription = tab,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = tab,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black
-                                    )
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp
                                 )
                             }
                         }
@@ -564,21 +709,7 @@ fun LibraryScreen(
             }
         }
 
-        // MiniPlayerPill Overlay
-        if (activeSong != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 8.dp), // offset for bottom nav bar
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                MiniPlayerPill(
-                    activeSong = activeSong!!,
-                    isPlaying = isPlaying,
-                    viewModel = viewModel
-                )
-            }
-        }
+        // Overlay removal
     }
 }
 

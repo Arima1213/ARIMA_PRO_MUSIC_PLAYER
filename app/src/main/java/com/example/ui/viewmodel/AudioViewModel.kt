@@ -557,22 +557,26 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectPreset(preset: String) {
         currentPreset.value = preset
-        when (preset) {
+        when (preset.uppercase()) {
             "FLAT" -> {
                 _bandGains.value = List(10) { 0.0f }
                 preampGain.value = 0.0f
             }
-            "BASS BOOST" -> {
-                _bandGains.value = listOf(8.0f, 6.5f, 4.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f)
+            "ROCK" -> {
+                _bandGains.value = listOf(5.0f, 4.0f, 2.0f, 0.0f, -1.0f, -1.0f, 1.0f, 2.0f, 4.0f, 5.0f)
                 preampGain.value = -3.0f
             }
-            "VOCAL FOCUS" -> {
-                _bandGains.value = listOf(-2.0f, -1.0f, 1.0f, 2.5f, 4.0f, 3.5f, 2.0f, 1.0f, 0.0f, -1.0f)
-                preampGain.value = -1.5f
+            "JAZZ" -> {
+                _bandGains.value = listOf(3.0f, 2.0f, 1.0f, 2.0f, -1.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f)
+                preampGain.value = -2.0f
             }
-            "TREBLE AIR" -> {
-                _bandGains.value = listOf(-1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.5f, 3.0f, 5.5f, 7.0f, 9.5f)
-                preampGain.value = -4.0f
+            "CLASSICAL" -> {
+                _bandGains.value = listOf(4.0f, 3.0f, 2.0f, -1.0f, -1.0f, -1.0f, 0.0f, 2.0f, 3.0f, 4.0f)
+                preampGain.value = -2.5f
+            }
+            "POP" -> {
+                _bandGains.value = listOf(-1.0f, 1.0f, 3.0f, 4.0f, 4.0f, 3.5f, 2.0f, 1.0f, 0.0f, -1.0f)
+                preampGain.value = -2.0f
             }
         }
     }
