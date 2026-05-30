@@ -100,13 +100,7 @@ fun LibraryScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             
             // 1. TOP BAR
-            AppHeader(
-                actions = {
-                    IconButton(onClick = { viewModel.selectTab("settings") }, modifier = Modifier.testTag("settings_button")) {
-                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", tint = TextPrimary)
-                    }
-                }
-            )
+            AppHeader()
 
             // 3. TAB ROW
             val tabs = listOf("Songs", "Albums", "Artists", "Folders")

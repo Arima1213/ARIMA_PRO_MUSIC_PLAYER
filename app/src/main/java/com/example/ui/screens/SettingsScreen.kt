@@ -247,6 +247,34 @@ fun SettingsScreen(viewModel: AudioViewModel) {
                 Spacer(modifier = Modifier.height(28.dp))
             }
 
+            // UI & VISUAL PREFERENCES GROUP
+            item {
+                SettingsHeader("UI & VISUAL PREFERENCES")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(BackgroundSurface)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(6.dp))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.selectTab("format_variants") }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Audio Codec Format Badges", style = BodyLarge.copy(fontWeight = FontWeight.Bold), color = TextPrimary)
+                            Text("View visual format badge identifiers", style = BodyMedium, color = TextSecondary)
+                        }
+                        Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "View", tint = TextSecondary)
+                    }
+                }
+                Spacer(modifier = Modifier.height(28.dp))
+            }
+
             // ELEGAN BRAND ABOUT DETAILS CARD
             item {
                 Column(

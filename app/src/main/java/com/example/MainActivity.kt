@@ -134,8 +134,7 @@ fun MainAppContent(viewModel: AudioViewModel) {
                         val items = listOf(
                             Triple("library", "Library", Icons.Default.Home),
                             Triple("dac", "DAC", Icons.Default.Info),
-                            Triple("settings", "Settings", Icons.Default.Settings),
-                            Triple("format_variants", "Codecs", Icons.Default.Star)
+                            Triple("settings", "Settings", Icons.Default.Settings)
                         )
 
                         items.forEach { (tabId, label, icon) ->

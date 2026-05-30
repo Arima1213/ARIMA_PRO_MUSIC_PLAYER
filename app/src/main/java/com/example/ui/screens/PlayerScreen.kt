@@ -248,7 +248,7 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                         )
                         IconButton(onClick = { viewModel.showEqualizerPanel.value = true }) {
                             Icon(
-                                imageVector = Icons.Default.Settings,
+                                imageVector = Icons.Default.Tune,
                                 contentDescription = "Equalizer",
                                 tint = AmberGold
                             )
