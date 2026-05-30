@@ -282,25 +282,43 @@ fun LibraryScreen(
                     .fillMaxWidth()
             ) {
                 when (currentTab) {
-                    "songs" -> SongsListView(
-                        songs = songs,
-                        activeSong = activeSong,
-                        onSongClick = { viewModel.playSong(it) },
-                        onFavClick = { viewModel.toggleFavorite(it) },
-                        onKebabClick = { selectedSongForSheet = it }
-                    )
-                    "albums" -> AlbumsGridView(
-                        albums = albums,
-                        onAlbumClick = { album ->
-                            viewModel.selectAlbum(album)
+                    "songs" -> {
+                        if (songs.isEmpty()) {
+                            EmptyLibraryState("No songs found", "Scan your device storage or add a new folder to build your audiophile library.", onScanClick = { viewModel.triggerScan("/storage/music") })
+                        } else {
+                            SongsListView(
+                                songs = songs,
+                                activeSong = activeSong,
+                                onSongClick = { viewModel.playSong(it) },
+                                onFavClick = { viewModel.toggleFavorite(it) },
+                                onKebabClick = { selectedSongForSheet = it }
+                            )
                         }
-                    )
-                    "artists" -> ArtistsListView(
-                        artists = artists,
-                        onArtistClick = { artist ->
-                            viewModel.selectArtist(artist)
+                    }
+                    "albums" -> {
+                        if (albums.isEmpty()) {
+                            EmptyLibraryState("No albums found", "Scan your device storage to index album art and metadata.", onScanClick = { viewModel.triggerScan("/storage/music") })
+                        } else {
+                            AlbumsGridView(
+                                albums = albums,
+                                onAlbumClick = { album ->
+                                    viewModel.selectAlbum(album)
+                                }
+                            )
                         }
-                    )
+                    }
+                    "artists" -> {
+                        if (artists.isEmpty()) {
+                            EmptyLibraryState("No artists found", "Scan your device storage to group tracks by creators.", onScanClick = { viewModel.triggerScan("/storage/music") })
+                        } else {
+                            ArtistsListView(
+                                artists = artists,
+                                onArtistClick = { artist ->
+                                    viewModel.selectArtist(artist)
+                                }
+                            )
+                        }
+                    }
                     "folders" -> FoldersListView(
                         folders = folders,
                         onAddFolderClick = { openDirectoryLauncher.launch(null) },
