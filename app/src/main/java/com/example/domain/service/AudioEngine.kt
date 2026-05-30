@@ -22,6 +22,7 @@ class AudioEngine(private val context: Context) {
     private var progressJob: Job? = null
     private var vuJob: Job? = null
     private val outputManager = com.arima.pro.core.audio.AudioOutputManager(context)
+    private val dacController = com.arima.pro.core.audio.DacController(context)
 
     var dacExclusiveModeActive = true
     val showDacMissingDialog = MutableStateFlow(false)
@@ -29,6 +30,21 @@ class AudioEngine(private val context: Context) {
     val gaplessPlaybackEnabled = MutableStateFlow(true)
 
     private val player: ExoPlayer get() = PlayerHolder.getOrCreatePlayer(context)
+
+    init {
+        // Observasi DAC untuk Auto-Routing cerdas
+        scope.launch {
+            dacController.detectDac().collect { state ->
+                if (state is com.arima.pro.core.audio.DacState.Detected) {
+                    val isPlaying = try { player.isPlaying } catch(e: Exception) { false }
+                    if (isPlaying || player.playbackState == Player.STATE_READY) {
+                        android.util.Log.d("AudioEngine", "DAC Connected during playback! Auto-routing audio to: ${state.dacInfo.name}")
+                        routeOutputToDac()
+                    }
+                }
+            }
+        }
+    }
 
     private val playbackListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlayingChange: Boolean) {
@@ -592,17 +608,19 @@ class AudioEngine(private val context: Context) {
 
     fun routeOutputToDac() {
         _dacRoutingStatus.value = DacRoutingStatus.Routing
-        val success = try {
-            outputManager.routeToDac(player)
-        } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "routeOutputToDac exception: ${e.message}")
-            false
-        }
-        if (success) {
-            val dacName = outputManager.getConnectedDacDevice()?.productName?.toString() ?: "USB DAC"
-            _dacRoutingStatus.value = DacRoutingStatus.Success(dacName)
-        } else {
-            _dacRoutingStatus.value = DacRoutingStatus.Failed("Device busy or enumeration failed — audio routed to speaker")
+        scope.launch {
+            val success = try {
+                outputManager.routeToDac(player)
+            } catch (e: Exception) {
+                android.util.Log.e("AudioEngine", "routeOutputToDac exception: ${e.message}")
+                false
+            }
+            if (success) {
+                val dacName = outputManager.getConnectedDacDevice()?.productName?.toString() ?: "USB DAC"
+                _dacRoutingStatus.value = DacRoutingStatus.Success(dacName)
+            } else {
+                _dacRoutingStatus.value = DacRoutingStatus.Failed("Device busy or enumeration failed — audio routed to speaker")
+            }
         }
     }
 

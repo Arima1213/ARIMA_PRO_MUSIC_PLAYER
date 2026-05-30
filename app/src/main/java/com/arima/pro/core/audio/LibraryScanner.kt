@@ -104,14 +104,27 @@ class LibraryScanner(private val context: Context) {
 
                             if (artBytes != null && artBytes!!.size > 300_000) {
                                 try {
-                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size)
+                                    val options = android.graphics.BitmapFactory.Options()
+                                    options.inJustDecodeBounds = true
+                                    android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size, options)
+                                    
+                                    var inSampleSize = 1
+                                    val halfHeight = options.outHeight / 2
+                                    val halfWidth = options.outWidth / 2
+                                    while (halfHeight / inSampleSize >= 256 && halfWidth / inSampleSize >= 256) {
+                                        inSampleSize *= 2
+                                    }
+                                    
+                                    options.inJustDecodeBounds = false
+                                    options.inSampleSize = inSampleSize
+                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size, options)
                                     if (bmp != null) {
                                         val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 256, 256, true)
                                         val output = java.io.ByteArrayOutputStream()
                                         scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, output)
                                         artBytes = output.toByteArray()
                                         bmp.recycle()
-                                        scaled.recycle()
+                                        if (bmp != scaled) scaled.recycle()
                                     }
                                 } catch (e: Exception) { /* compression failed — keep original */ }
                             }
@@ -218,14 +231,27 @@ class LibraryScanner(private val context: Context) {
 
                             if (artBytes != null && artBytes!!.size > 300_000) {
                                 try {
-                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size)
+                                    val options = android.graphics.BitmapFactory.Options()
+                                    options.inJustDecodeBounds = true
+                                    android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size, options)
+                                    
+                                    var inSampleSize = 1
+                                    val halfHeight = options.outHeight / 2
+                                    val halfWidth = options.outWidth / 2
+                                    while (halfHeight / inSampleSize >= 256 && halfWidth / inSampleSize >= 256) {
+                                        inSampleSize *= 2
+                                    }
+                                    
+                                    options.inJustDecodeBounds = false
+                                    options.inSampleSize = inSampleSize
+                                    val bmp = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes!!.size, options)
                                     if (bmp != null) {
                                         val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 256, 256, true)
                                         val output = java.io.ByteArrayOutputStream()
                                         scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, output)
                                         artBytes = output.toByteArray()
                                         bmp.recycle()
-                                        scaled.recycle()
+                                        if (bmp != scaled) scaled.recycle()
                                     }
                                 } catch (e: Exception) { /* ignore */ }
                             }
@@ -282,8 +308,10 @@ class LibraryScanner(private val context: Context) {
         if (parsedSongs.isNotEmpty()) {
             emit(ScanProgress("Storing tracks into database...", filesScanned, filesScanned, tracksFound, 0.95f))
             withContext(Dispatchers.IO) {
-                songDao.deleteSongsByFolder(folderPath)
-                songDao.insertSongs(parsedSongs)
+                androidx.room.withTransaction(db) {
+                    songDao.deleteSongsByFolder(folderPath)
+                    songDao.insertSongs(parsedSongs)
+                }
 
                 val sdf = SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault())
                 val nowStr = sdf.format(Date())

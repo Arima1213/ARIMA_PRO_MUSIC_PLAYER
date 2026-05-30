@@ -18,7 +18,7 @@ class AudioOutputManager(private val context: Context) {
      * This routing configuration is applied exactly once per player initialization/recreation
      * to prevent unpredictable multi-step routing issues.
      */
-    fun routeToDac(player: ExoPlayer?): Boolean {
+    suspend fun routeToDac(player: ExoPlayer?): Boolean {
         if (player == null) return false
         val maxRetries = 3
         var success = false
@@ -40,11 +40,7 @@ class AudioOutputManager(private val context: Context) {
                     exception = e
                     android.util.Log.e("AudioOutputManager", "Routing attempt $attempt failed for device $chosenDeviceName: ${e.message}")
                     if (attempt < maxRetries) {
-                        try {
-                            Thread.sleep(100)
-                        } catch (ie: InterruptedException) {
-                            // ignore
-                        }
+                        kotlinx.coroutines.delay(100)
                     }
                 }
             }
