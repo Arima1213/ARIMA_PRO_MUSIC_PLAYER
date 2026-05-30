@@ -8,6 +8,7 @@ import java.nio.ByteBuffer
 class AudioLevelExtractor(private val vuMeterAnalyzer: VuMeterAnalyzer) : BaseAudioProcessor() {
 
     private var channelCount = 2
+    private var pcmDataBuffer = ByteArray(0)
 
     // Callback when new levels are calculated
     var onLevelsUpdated: ((VuLevels) -> Unit)? = null
@@ -27,9 +28,12 @@ class AudioLevelExtractor(private val vuMeterAnalyzer: VuMeterAnalyzer) : BaseAu
         if (size <= 0) return
 
         // Extract PCM buffer bytes to analyze
-        val pcmData = ByteArray(size)
+        if (pcmDataBuffer.size < size) {
+            pcmDataBuffer = ByteArray(size)
+        }
+        val pcmData = pcmDataBuffer
         val duplicate = inputBuffer.duplicate()
-        duplicate.get(pcmData)
+        duplicate.get(pcmData, 0, size)
 
         // Run analysis
         try {

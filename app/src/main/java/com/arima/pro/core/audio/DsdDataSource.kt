@@ -52,12 +52,26 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
             return dds.open(dataSpec)
         }
 
-        // 2. Read magic bytes for local files/content
+        // 2. Read magic bytes (with ID3 skip) for local files/content
         var magic = ByteArray(4)
         var bytesRead = 0
         try {
             context.contentResolver.openInputStream(dataSpec.uri)?.use { stream ->
-                bytesRead = stream.read(magic, 0, 4)
+                val id3Header = ByteArray(10)
+                val id3Read = stream.read(id3Header, 0, 10)
+                if (id3Read == 10 && String(id3Header, 0, 3, Charsets.US_ASCII) == "ID3") {
+                    val size = ((id3Header[6].toInt() and 0x7f) shl 21) or
+                               ((id3Header[7].toInt() and 0x7f) shl 14) or
+                               ((id3Header[8].toInt() and 0x7f) shl 7) or
+                               (id3Header[9].toInt() and 0x7f)
+                    stream.skip(size.toLong())
+                    bytesRead = stream.read(magic, 0, 4)
+                } else if (id3Read > 0) {
+                    // Not ID3, copy first 4 bytes into magic
+                    val copyLen = Math.min(4, id3Read)
+                    System.arraycopy(id3Header, 0, magic, 0, copyLen)
+                    bytesRead = copyLen
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("DsdDataSource", "Error reading magic bytes: ${e.message}")

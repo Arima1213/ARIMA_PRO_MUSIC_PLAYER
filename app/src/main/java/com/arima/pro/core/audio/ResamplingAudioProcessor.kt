@@ -11,6 +11,7 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
     private var targetSampleRate: Int = 0 // 0 means no resampling (Bit-perfect)
     private var lastInputSampleRate = 0
     private var lastInputChannelCount = 0
+    private var inputShortsBuffer = ShortArray(0)
 
     fun setTargetSampleRate(sampleRate: Int) {
         if (targetSampleRate != sampleRate) {
@@ -86,9 +87,12 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
             return
         }
 
-        val inputShorts = ShortArray(finalShortsSize)
+        if (inputShortsBuffer.size < finalShortsSize) {
+            inputShortsBuffer = ShortArray(finalShortsSize)
+        }
+        val inputShorts = inputShortsBuffer
         val tempBuffer = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
-        for (i in 0 until inputShorts.size) {
+        for (i in 0 until finalShortsSize) {
             if (tempBuffer.remaining() >= 2) {
                 inputShorts[i] = tempBuffer.getShort()
             } else {
