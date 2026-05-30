@@ -81,6 +81,7 @@ class LibraryScanner(private val context: Context) {
                                 durationVal = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
                                 artBytes = retriever.embeddedPicture
                             } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException) throw e
                                 // Ignored
                             } finally {
                                 retriever.release()
@@ -96,10 +97,16 @@ class LibraryScanner(private val context: Context) {
                                         try {
                                             val af = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
                                             af.tag?.firstArtwork?.binaryData?.let { artBytes = it }
-                                        } catch (e: Exception) { /* jaudiotagger failed */ }
+                                        } catch (e: Exception) {
+                                            if (e is kotlinx.coroutines.CancellationException) throw e
+                                            /* jaudiotagger failed */
+                                        }
                                         tempFile.delete()
                                     }
-                                } catch (e: Exception) { /* stream failed */ }
+                                } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    /* stream failed */
+                                }
                             }
 
                             if (artBytes != null && artBytes!!.size > 300_000) {
@@ -126,7 +133,10 @@ class LibraryScanner(private val context: Context) {
                                         bmp.recycle()
                                         if (bmp != scaled) scaled.recycle()
                                     }
-                                } catch (e: Exception) { /* compression failed — keep original */ }
+                                } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    /* compression failed — keep original */
+                                }
                             }
 
                             if (title.isEmpty()) title = name.substringBeforeLast('.')
@@ -151,6 +161,7 @@ class LibraryScanner(private val context: Context) {
                                 albumArt = artBytes
                             )
                         } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                             null
                         }
                     }
@@ -215,6 +226,7 @@ class LibraryScanner(private val context: Context) {
                                     artBytes = tag.firstArtwork?.binaryData
                                 }
                             } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException) throw e
                                 // Fallback
                             }
 
@@ -225,6 +237,7 @@ class LibraryScanner(private val context: Context) {
                                     artBytes = retriever.embeddedPicture
                                     retriever.release()
                                 } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
                                     // Ignored
                                 }
                             }
@@ -253,7 +266,10 @@ class LibraryScanner(private val context: Context) {
                                         bmp.recycle()
                                         if (bmp != scaled) scaled.recycle()
                                     }
-                                } catch (e: Exception) { /* ignore */ }
+                                } catch (e: Exception) { 
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    /* ignore */ 
+                                }
                             }
 
                             if (title.isEmpty()) title = file.nameWithoutExtension
@@ -279,6 +295,7 @@ class LibraryScanner(private val context: Context) {
                                 isFavorite = false
                             )
                         } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                             null
                         }
                     }

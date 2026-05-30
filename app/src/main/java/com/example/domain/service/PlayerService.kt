@@ -36,7 +36,13 @@ class PlayerService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
-        super.onCreate()
+        try {
+            super.onCreate()
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerService", "System rejected Foreground Service creation: ${e.message}")
+            stopSelf()
+            return
+        }
         
         val player = PlayerHolder.getOrCreatePlayer(this)
         sharedPlayer = player
@@ -52,7 +58,12 @@ class PlayerService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        super.onStartCommand(intent, flags, startId)
+        try {
+            super.onStartCommand(intent, flags, startId)
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerService", "System rejected Foreground Service start: ${e.message}")
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 

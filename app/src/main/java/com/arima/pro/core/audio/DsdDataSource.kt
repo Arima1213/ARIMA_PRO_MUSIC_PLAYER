@@ -73,6 +73,9 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                     bytesRead = copyLen
                 }
             }
+        } catch (e: SecurityException) {
+            android.util.Log.e("DsdDataSource", "SecurityException reading magic bytes (SAF permission revoked): ${e.message}")
+            throw java.io.IOException(e)
         } catch (e: Exception) {
             android.util.Log.e("DsdDataSource", "Error reading magic bytes: ${e.message}")
         }
@@ -141,6 +144,9 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                         return totalSimulatedBytes + 44 // Include WAV header size
                     }
                 }
+            } catch (e: SecurityException) {
+                android.util.Log.e("DsdDataSource", "SecurityException parsing DFF (SAF permission revoked): ${e.message}")
+                throw java.io.IOException(e)
             } catch (e: Exception) {
                 android.util.Log.e("DsdDataSource", "Error parsing DFF: ${e.message}")
             }
