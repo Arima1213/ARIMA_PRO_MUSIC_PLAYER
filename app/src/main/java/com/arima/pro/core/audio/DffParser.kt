@@ -20,9 +20,23 @@ class DffParser {
     var channelCount = 1
 
     fun parse(inputStream: InputStream): DffMetadata {
-        val marker = ByteArray(4)
-        val read = inputStream.read(marker)
-        if (read < 4 || !marker.contentEquals("FRM8".toByteArray())) {
+        val marker = ByteArray(10)
+        var read = inputStream.read(marker)
+        
+        // Skip ID3v2 if present
+        if (read == 10 && String(marker, 0, 3, Charsets.US_ASCII) == "ID3") {
+            val size = ((marker[6].toInt() and 0x7f) shl 21) or
+                       ((marker[7].toInt() and 0x7f) shl 14) or
+                       ((marker[8].toInt() and 0x7f) shl 7) or
+                       (marker[9].toInt() and 0x7f)
+            inputStream.skip(size.toLong())
+            read = inputStream.read(marker, 0, 4)
+        } else if (read == 10) {
+            // Not ID3, keep the first 4 bytes
+            read = 4
+        }
+        
+        if (read < 4 || String(marker, 0, 4, Charsets.US_ASCII) != "FRM8") {
             throw IllegalArgumentException("Not a valid DFF file: wrong marker")
         }
 

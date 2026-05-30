@@ -22,6 +22,24 @@ object PlayerHolder {
     var bufferMs = 200 // Default: Max Latency (Stable)
     var dopModeActive = false
 
+    fun setBitPerfectMode(active: Boolean) {
+        if (bitPerfectActive != active) {
+            bitPerfectActive = active
+            android.util.Log.d("PlayerHolder", "Bit-Perfect Mode changed to: $active")
+            
+            // If bit-perfect is turned OFF mid-playback, we need to immediately attach Equalizer
+            if (!active) {
+                val activeSessionId = player?.audioSessionId ?: androidx.media3.common.C.AUDIO_SESSION_ID_UNSET
+                if (activeSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET) {
+                    equalizerEngine.setAudioSessionId(activeSessionId)
+                }
+            } else {
+                // If bit-perfect is turned ON, disable Equalizer immediately
+                equalizerEngine.release()
+            }
+        }
+    }
+
     // Step 1 requested API methods:
     fun applyResamplingSettings(targetSampleRate: Int) {
         if (bitPerfectActive) {
@@ -92,6 +110,11 @@ object PlayerHolder {
             player = null
             
             val newPlayer = getOrCreatePlayer(context)
+            try {
+                com.example.domain.service.PlayerService.updateSharedPlayer(newPlayer)
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerHolder", "Failed to sync new player to PlayerService: ${e.message}")
+            }
             if (currentMediaItem != null) {
                 newPlayer.setMediaItem(currentMediaItem, position)
                 newPlayer.prepare()
@@ -145,8 +168,13 @@ object PlayerHolder {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
+                val processors = if (dopModeActive) {
+                    emptyArray<androidx.media3.common.audio.AudioProcessor>()
+                } else {
+                    arrayOf(audioLevelExtractor, resamplingAudioProcessor, ditheringAudioProcessor, gainNormalizationAudioProcessor)
+                }
                 return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
-                    .setAudioProcessors(arrayOf(audioLevelExtractor, resamplingAudioProcessor, ditheringAudioProcessor, gainNormalizationAudioProcessor))
+                    .setAudioProcessors(processors)
                     .setAudioTrackBufferSizeProvider(object : androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider {
                         override fun getBufferSizeInBytes(
                             minBufferSizeInBytes: Int,

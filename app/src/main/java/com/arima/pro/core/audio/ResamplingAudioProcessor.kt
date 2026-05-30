@@ -103,13 +103,23 @@ class ResamplingAudioProcessor : BaseAudioProcessor() {
             val fraction = (srcIndexDouble - srcIndexFloor).toFloat()
 
             for (ch in 0 until channels) {
+                val idx0 = ((srcIndexFloor - 1) * channels + ch).coerceIn(0, inputShorts.size - 1)
                 val idx1 = (srcIndexFloor * channels + ch).coerceIn(0, inputShorts.size - 1)
                 val idx2 = ((srcIndexFloor + 1) * channels + ch).coerceIn(0, inputShorts.size - 1)
+                val idx3 = ((srcIndexFloor + 2) * channels + ch).coerceIn(0, inputShorts.size - 1)
 
-                val s1 = if (idx1 < inputShorts.size && idx1 >= 0) inputShorts[idx1] else 0
-                val s2 = if (idx2 < inputShorts.size && idx2 >= 0) inputShorts[idx2] else s1
+                val s0 = inputShorts[idx0].toFloat()
+                val s1 = inputShorts[idx1].toFloat()
+                val s2 = inputShorts[idx2].toFloat()
+                val s3 = inputShorts[idx3].toFloat()
 
-                val interpolatedSample = (s1 * (1.0f - fraction) + s2 * fraction).toInt().coerceIn(-32768, 32767).toShort()
+                // 4-point Hermite Spline Interpolation
+                val c0 = s1
+                val c1 = 0.5f * (s2 - s0)
+                val c2 = s0 - 2.5f * s1 + 2.0f * s2 - 0.5f * s3
+                val c3 = 0.5f * (s3 - s0) + 1.5f * (s1 - s2)
+                
+                val interpolatedSample = (((c3 * fraction + c2) * fraction + c1) * fraction + c0).toInt().coerceIn(-32768, 32767).toShort()
                 buffer.putShort(interpolatedSample)
             }
         }

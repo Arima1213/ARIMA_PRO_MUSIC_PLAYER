@@ -264,10 +264,12 @@ class AudioEngine(private val context: Context) {
 
                 if (gaplessPlaybackEnabled.value) {
                     // Populate multi-item playlist internally for native seamless transition
-                    val mediaItems = _playbackQueue.value.map { qSong ->
-                        createMediaItem(qSong)
+                    // Move heavy object mapping to background thread to prevent ANR on large playlists
+                    val queueSnapshot = _playbackQueue.value.toList()
+                    val mediaItems = withContext(Dispatchers.Default) {
+                        queueSnapshot.map { qSong -> createMediaItem(qSong) }
                     }
-                    val index = _playbackQueue.value.indexOfFirst { it.id == song.id }.coerceIn(0, mediaItems.size - 1)
+                    val index = queueSnapshot.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
                     activePlayer.setMediaItems(mediaItems, index, 0L)
                 } else {
                     // Single item mode
@@ -488,9 +490,12 @@ class AudioEngine(private val context: Context) {
                     context,
                     android.Manifest.permission.RECORD_AUDIO
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                
+                val isRoutedToDac = isDacConnected() && outputManager.verifyRouting()
 
-                if (!hasPermission) {
-                    android.util.Log.w("AudioEngine", "Visualizer unavailable (permission denied), using AudioProcessor VU")
+                if (!hasPermission || isRoutedToDac) {
+                    val reason = if (!hasPermission) "permission denied" else "hardware DAC offload active"
+                    android.util.Log.w("AudioEngine", "Visualizer unavailable ($reason), using AudioProcessor VU")
                     visualizer = null
                 } else {
                     val vis = com.arima.pro.core.audio.PsychoVisualizer(audioSessionId)

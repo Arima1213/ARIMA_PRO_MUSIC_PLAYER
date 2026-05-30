@@ -16,9 +16,26 @@ class DsfParser {
         try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 val buffer = ByteArray(128)
-                // Need to detect if it's DSF or DFF
-                if (stream.read(buffer, 0, 4) != 4) return AudioFormat.UNKNOWN
-                val magic = String(buffer, 0, 4)
+                
+                // Skip ID3v2 if present
+                var magicReadCount = stream.read(buffer, 0, 10)
+                if (magicReadCount == 10 && String(buffer, 0, 3, Charsets.US_ASCII) == "ID3") {
+                    val size = ((buffer[6].toInt() and 0x7f) shl 21) or
+                               ((buffer[7].toInt() and 0x7f) shl 14) or
+                               ((buffer[8].toInt() and 0x7f) shl 7) or
+                               (buffer[9].toInt() and 0x7f)
+                    stream.skip(size.toLong())
+                    magicReadCount = stream.read(buffer, 0, 4)
+                } else if (magicReadCount == 10) {
+                    // Not ID3, but we already read 10 bytes. The first 4 bytes are our magic.
+                    // Keep them in buffer
+                    magicReadCount = 4
+                } else {
+                    return AudioFormat.UNKNOWN
+                }
+                
+                if (magicReadCount != 4) return AudioFormat.UNKNOWN
+                val magic = String(buffer, 0, 4, Charsets.US_ASCII)
                 
                 if (magic == "DSD ") {
                     // DSF File format

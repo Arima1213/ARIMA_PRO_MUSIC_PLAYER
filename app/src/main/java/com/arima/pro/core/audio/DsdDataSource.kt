@@ -22,6 +22,8 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
     private var currentPosition = 0L
     private var dsdDataLeftBytes = 0L
     private var channelCount = 2
+    private var wavHeaderWritten = false
+    private var sampleRateToSimulate = 176400
     
     // Buffer for block reads
     private var blockBufferL = ByteArray(4096)
@@ -82,13 +84,14 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                     inputStream = stream
                     
                     // Return simulated PCM layout: 176.4kHz, 2 channels, 16-bit (2 bytes) or 24-bit (3 bytes)
-                    val sampleRate = 176400
+                    sampleRateToSimulate = 176400
                     val channels = 2
                     val bytesPerSample = if (useDoP) 3 else 2
                     val totalDurationSec = dsfParser.dataSize / (dsfParser.sampleRate / 8 * dsfParser.channelCount).toFloat()
-                    val totalSimulatedBytes = (sampleRate * channels * bytesPerSample * totalDurationSec).toLong()
+                    val totalSimulatedBytes = (sampleRateToSimulate * channels * bytesPerSample * totalDurationSec).toLong()
+                    wavHeaderWritten = false
                     
-                    return totalSimulatedBytes
+                    return totalSimulatedBytes + 44 // Include WAV header size
                 }
             }
         } else if (bytesRead >= 4 && magic.contentEquals("FRM8".toByteArray())) {
@@ -114,13 +117,14 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
                         streamToPlay.skip(dffParser.dataStartOffset)
                         inputStream = streamToPlay
                         
-                        val sampleRate = 176400
+                        sampleRateToSimulate = 176400
                         val channels = 2
                         val bytesPerSample = if (useDoP) 3 else 2
                         val totalDurationSec = dffParser.dataSize / (dffParser.sampleRate / 8 * dffParser.channelCount).toFloat()
-                        val totalSimulatedBytes = (sampleRate * channels * bytesPerSample * totalDurationSec).toLong()
+                        val totalSimulatedBytes = (sampleRateToSimulate * channels * bytesPerSample * totalDurationSec).toLong()
+                        wavHeaderWritten = false
                         
-                        return totalSimulatedBytes
+                        return totalSimulatedBytes + 44 // Include WAV header size
                     }
                 }
             } catch (e: Exception) {
@@ -150,9 +154,43 @@ class DsdDataSource(private val context: Context, private val useDoP: Boolean) :
             return C.RESULT_END_OF_INPUT
         }
         
-        // Read DSD blocks and transcode to PCM or DoP on-the-fly
         var bytesWritten = 0
         val bytesPerSample = if (useDoP) 3 else 2
+        
+        if (!wavHeaderWritten) {
+            val totalDurationSec = if (dsdDataLeftBytes > 0 && channelCount > 0) {
+                dsdDataLeftBytes / (2822400 / 8 * 2).toFloat()
+            } else 0f
+            
+            val simulatedBytes = (sampleRateToSimulate * 2 * bytesPerSample * totalDurationSec).toLong()
+            val fileLength = simulatedBytes + 36
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+            
+            header.put("RIFF".toByteArray(Charsets.US_ASCII))
+            header.putInt(fileLength.toInt())
+            header.put("WAVE".toByteArray(Charsets.US_ASCII))
+            header.put("fmt ".toByteArray(Charsets.US_ASCII))
+            header.putInt(16) // Format chunk size
+            header.putShort(1) // AudioFormat: PCM = 1
+            header.putShort(2.toShort()) // NumChannels
+            header.putInt(sampleRateToSimulate) // SampleRate
+            header.putInt(sampleRateToSimulate * 2 * bytesPerSample) // ByteRate
+            header.putShort((2 * bytesPerSample).toShort()) // BlockAlign
+            header.putShort((bytesPerSample * 8).toShort()) // BitsPerSample
+            header.put("data".toByteArray(Charsets.US_ASCII))
+            header.putInt(simulatedBytes.toInt()) // Data size
+            
+            val headerBytes = header.array()
+            val bytesToCopy = kotlin.math.min(headerBytes.size, length)
+            System.arraycopy(headerBytes, 0, buffer, offset, bytesToCopy)
+            
+            wavHeaderWritten = true
+            bytesWritten += bytesToCopy
+            
+            if (bytesWritten >= length) {
+                return bytesWritten
+            }
+        }
         val bytesPerFrame = bytesPerSample * 2 // stereo L & R
         
         while (bytesWritten + bytesPerFrame <= length) {

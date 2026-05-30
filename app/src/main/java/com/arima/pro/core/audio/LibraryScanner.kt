@@ -89,9 +89,10 @@ class LibraryScanner(private val context: Context) {
                             if (artBytes == null) {
                                 try {
                                     context.contentResolver.openInputStream(docFile.uri)?.use { stream ->
-                                        val bytes = stream.readBytes()
-                                        val tempFile = java.io.File.createTempFile("art_extract", ".bin")
-                                        tempFile.outputStream().use { it.write(bytes) }
+                                        val tempFile = java.io.File.createTempFile("art_extract", ".$extension")
+                                        tempFile.outputStream().use { outStream ->
+                                            stream.copyTo(outStream, 8192)
+                                        }
                                         try {
                                             val af = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
                                             af.tag?.firstArtwork?.binaryData?.let { artBytes = it }

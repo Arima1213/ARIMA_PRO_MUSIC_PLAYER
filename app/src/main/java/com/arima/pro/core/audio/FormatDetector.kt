@@ -14,8 +14,17 @@ class FormatDetector(private val context: Context) {
         
         try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
-                val header = ByteArray(12)
-                val read = stream.read(header)
+                var header = ByteArray(12)
+                var read = stream.read(header)
+                if (read >= 10 && String(header, 0, 3, Charsets.US_ASCII) == "ID3") {
+                    val size = ((header[6].toInt() and 0x7f) shl 21) or
+                               ((header[7].toInt() and 0x7f) shl 14) or
+                               ((header[8].toInt() and 0x7f) shl 7) or
+                               (header[9].toInt() and 0x7f)
+                    stream.skip(size.toLong())
+                    read = stream.read(header)
+                }
+                
                 if (read >= 4) {
                     val magic4 = String(header, 0, 4, Charsets.US_ASCII)
                     if (magic4 == "fLaC") return AudioFormat.FLAC

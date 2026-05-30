@@ -22,6 +22,15 @@ class PlayerService : MediaSessionService() {
             
         var sharedSession: MediaSession? = null
             private set
+
+        fun updateSharedPlayer(newPlayer: ExoPlayer) {
+            sharedPlayer = newPlayer
+            try {
+                sharedSession?.player = newPlayer
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerService", "Error updating MediaSession player: ${e.message}")
+            }
+        }
     }
 
     private var mediaSession: MediaSession? = null
