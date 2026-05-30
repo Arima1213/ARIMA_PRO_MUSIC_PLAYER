@@ -124,4 +124,5 @@ dependencies {
   implementation(libs.androidx.media3.common)
   implementation(libs.jaudiotagger)
   implementation("androidx.documentfile:documentfile:1.0.1")
+  implementation("androidx.palette:palette-ktx:1.0.0")
 }

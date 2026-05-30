@@ -177,36 +177,42 @@ fun MainAppContent(viewModel: AudioViewModel) {
                 .background(BackgroundPrimary)
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
-                "library" -> LibraryScreen(
-                    viewModel = viewModel
-                )
-                "player" -> PlayerScreen(viewModel)
-                "dac" -> DacMonitorScreen(viewModel)
-                "settings" -> SettingsScreen(viewModel)
-                "format_variants" -> FormatBadgeVariantsScreen(viewModel)
-                "album_detail" -> {
-                    val album = viewModel.selectedAlbum.value
-                    val albumSongs = viewModel.allSongs.value.filter { it.album == album?.title }
-                    if (album != null) {
-                        com.example.ui.screens.AlbumDetailScreen(
-                            album = album,
-                            songs = albumSongs.sortedBy { it.path },
-                            viewModel = viewModel,
-                            onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
-                        )
+            androidx.compose.animation.Crossfade(
+                targetState = currentTab,
+                animationSpec = androidx.compose.animation.core.tween(300),
+                label = "MainScreenTransition"
+            ) { tab ->
+                when (tab) {
+                    "library" -> LibraryScreen(
+                        viewModel = viewModel
+                    )
+                    "player" -> PlayerScreen(viewModel)
+                    "dac" -> DacMonitorScreen(viewModel)
+                    "settings" -> SettingsScreen(viewModel)
+                    "format_variants" -> FormatBadgeVariantsScreen(viewModel)
+                    "album_detail" -> {
+                        val album = viewModel.selectedAlbum.value
+                        val albumSongs = viewModel.allSongs.value.filter { it.album == album?.title }
+                        if (album != null) {
+                            com.example.ui.screens.AlbumDetailScreen(
+                                album = album,
+                                songs = albumSongs.sortedBy { it.path },
+                                viewModel = viewModel,
+                                onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
+                            )
+                        }
                     }
-                }
-                "artist_detail" -> {
-                    val artist = viewModel.selectedArtist.value
-                    val artistSongs = viewModel.allSongs.value.filter { it.artist == artist?.name }
-                    if (artist != null) {
-                        com.example.ui.screens.ArtistDetailScreen(
-                            artist = artist,
-                            songs = artistSongs.sortedWith(compareBy({ it.album }, { it.path })),
-                            viewModel = viewModel,
-                            onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
-                        )
+                    "artist_detail" -> {
+                        val artist = viewModel.selectedArtist.value
+                        val artistSongs = viewModel.allSongs.value.filter { it.artist == artist?.name }
+                        if (artist != null) {
+                            com.example.ui.screens.ArtistDetailScreen(
+                                artist = artist,
+                                songs = artistSongs.sortedWith(compareBy({ it.album }, { it.path })),
+                                viewModel = viewModel,
+                                onBack = { viewModel.selectTab("library"); viewModel.clearSelection() }
+                            )
+                        }
                     }
                 }
             }

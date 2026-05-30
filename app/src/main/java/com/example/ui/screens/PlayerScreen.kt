@@ -38,6 +38,13 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.AudioViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.palette.graphics.Palette
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 
 @Composable
 fun CustomPauseIcon(color: Color, modifier: Modifier = Modifier) {
@@ -169,10 +176,33 @@ fun PlayerScreen(viewModel: AudioViewModel) {
         label = "Rotation"
     )
 
+    // Palette Colors State
+    var dominantColor by remember { mutableStateOf(BackgroundPrimary) }
+    var vibrantColor by remember { mutableStateOf(BackgroundPrimary) }
+
+    // Animated Colors
+    val animDominant by animateColorAsState(
+        targetValue = dominantColor,
+        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        label = "DominantColor"
+    )
+    val animVibrant by animateColorAsState(
+        targetValue = vibrantColor,
+        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        label = "VibrantColor"
+    )
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundPrimary)
+            .drawBehind {
+                val brush = Brush.verticalGradient(
+                    colors = listOf(animVibrant.copy(alpha = 0.6f), animDominant.copy(alpha = 0.8f), BackgroundPrimary),
+                    startY = 0f,
+                    endY = size.height * 0.8f
+                )
+                drawRect(brush = brush)
+            }
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -242,6 +272,12 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                     try {
                                         android.graphics.BitmapFactory.decodeByteArray(albumArt, 0, albumArt.size)?.let { bmp ->
                                             value = bmp.asImageBitmap()
+                                            Palette.from(bmp).generate { palette ->
+                                                val dom = palette?.dominantSwatch?.rgb
+                                                val vib = palette?.vibrantSwatch?.rgb ?: palette?.mutedSwatch?.rgb
+                                                dominantColor = if (dom != null) Color(dom) else BackgroundPrimary
+                                                vibrantColor = if (vib != null) Color(vib) else BackgroundPrimary
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         value = null
@@ -249,15 +285,27 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                 }
                             } else {
                                 value = null
+                                dominantColor = BackgroundPrimary
+                                vibrantColor = BackgroundPrimary
                             }
                         }
                         
+                        val artScale by animateFloatAsState(
+                            targetValue = if (isPlaying) 1.0f else 0.85f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "ArtScale"
+                        )
+
                         Box(
                             modifier = Modifier
                                 .aspectRatio(1f)
                                 .fillMaxHeight(0.9f)
+                                .graphicsLayer {
+                                    scaleX = artScale
+                                    scaleY = artScale
+                                }
                                 .customShadow(
-                                    color = if (isPlaying) AmberGold.copy(alpha = 0.2f) else Color.Transparent,
+                                    color = if (isPlaying) animVibrant.copy(alpha = 0.3f) else Color.Transparent,
                                     radius = 20.dp,
                                     blurRadius = 30.dp,
                                     offsetY = 10.dp
@@ -502,15 +550,20 @@ fun PlayerScreen(viewModel: AudioViewModel) {
                                 .testTag("play_pause_button"),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (isPlaying) {
-                                CustomPauseIcon(color = AmberGold, modifier = Modifier.size(24.dp).padding(4.dp))
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = AmberGold,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                            AnimatedContent(
+                                targetState = isPlaying,
+                                label = "PlayPauseAnimation"
+                            ) { playing ->
+                                if (playing) {
+                                    CustomPauseIcon(color = AmberGold, modifier = Modifier.size(24.dp).padding(4.dp))
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Play",
+                                        tint = AmberGold,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
                             }
                         }
 
